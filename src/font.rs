@@ -62,14 +62,25 @@ impl AtlasGlyph {
 pub struct FontAtlas {
     pub texture: gl::types::GLuint,
     pub glyphs: std::collections::HashMap<char, AtlasGlyph>,
+    pub advance_height: f32,
 }
 
 impl FontAtlas {
-    pub fn new() -> FontAtlas {
-        let x = load_font();
+    pub fn new(scale: f32) -> FontAtlas {
+        let font_data = include_bytes!("../assets/consolas.ttf");
+        let font = Font::try_from_bytes(font_data as &[u8]).unwrap();
+
+        let uniform_scale = Scale::uniform(scale);
+
+        let v_metrics = font.v_metrics(uniform_scale);
+
+        // println!("{:?}", font.glyph(' ').unwrap());
+
+        let x = load_font(&font, uniform_scale);
         FontAtlas {
             texture: x.0,
             glyphs: x.1,
+            advance_height: v_metrics.ascent - v_metrics.descent + v_metrics.line_gap,
         }
     }
 }
@@ -94,31 +105,41 @@ fn load_texture(buffer: *const gl::types::GLvoid, width: u32, height: u32) -> gl
             gl::UNSIGNED_BYTE,
             buffer,
         );
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+        gl::TexParameteri(
+            gl::TEXTURE_2D,
+            gl::TEXTURE_WRAP_S,
+            gl::CLAMP_TO_EDGE as i32,
+        );
+        gl::TexParameteri(
+            gl::TEXTURE_2D,
+            gl::TEXTURE_WRAP_T,
+            gl::CLAMP_TO_EDGE as i32,
+        );
+
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
     }
 
     texture
 }
 
-pub fn load_font() -> (
+pub fn load_font(
+    font: &rusttype::Font,
+    scale: Scale,
+) -> (
     gl::types::GLuint,
     std::collections::HashMap<char, AtlasGlyph>,
 ) {
     let chars = b'a'..b'z';
 
-    let font_data = include_bytes!("../assets/monaco.ttf");
-    let font =
-        Font::try_from_bytes(font_data as &[u8]).expect("error constructing a Font from bytes");
-
     let glyphs: Vec<(PositionedGlyph, (i32, i32), char)> = (chars)
+        .chain(b'A'..b'Z')
         .map(char::from)
+        .chain("~`!@#$%^&*()_+{}:\"'/.,?><-=v1234567890v".chars())
         .map(|char| {
             let glyph = font
                 .glyph(char)
-                .scaled(Scale::uniform(100.0))
+                .scaled(scale)
                 .positioned(Point { x: 0.0, y: 0.0 });
 
             let bb = glyph.pixel_bounding_box().unwrap();
@@ -129,7 +150,10 @@ pub fn load_font() -> (
         })
         .collect();
 
-    let total_width: u32 = glyphs.iter().map(|x| ((x.1).0) as u32).sum();
+    let mut total_width: u32 = glyphs.iter().map(|x| ((x.1).0) as u32).sum();
+
+    total_width += (glyphs.len() * 8) as u32;
+
     let max_height = glyphs.iter().map(|x| (x.1).1 as u32).max().unwrap();
 
     let mut buff = vec![0; (total_width * max_height) as usize];
@@ -141,6 +165,7 @@ pub fn load_font() -> (
 
     for g in glyphs {
         let glyph = g.0;
+
         let dimmensions = g.1;
         let bb = glyph.pixel_bounding_box().unwrap();
 
@@ -167,7 +192,7 @@ pub fn load_font() -> (
             ),
         };
 
-        acc_width += dimmensions.0 as u32;
+        acc_width += dimmensions.0 as u32 + 8;
         atlas_glyphs.insert(
             g.2,
             AtlasGlyph {
@@ -187,9 +212,9 @@ pub fn load_font() -> (
         );
     }
 
-    // let x: ImageBuffer<Luma<u8>, std::vec::Vec<u8>> =
-    //     ImageBuffer::from_raw(total_width as u32, max_height as u32, buff.clone()).unwrap();
-    // x.save("image_example.png").unwrap();
+    let x: ImageBuffer<Luma<u8>, std::vec::Vec<u8>> =
+        ImageBuffer::from_raw(total_width as u32, max_height as u32, buff.clone()).unwrap();
+    x.save("image_example.png").unwrap();
     let texture = load_texture(
         buff.as_ptr() as *const gl::types::GLvoid,
         total_width,

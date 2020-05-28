@@ -1,68 +1,90 @@
 extern crate gl;
 
-use glutin::event::{Event, WindowEvent};
-use glutin::event_loop::{ControlFlow, EventLoop};
-use glutin::window::WindowBuilder;
-use glutin::ContextBuilder;
+extern crate glfw;
+use glfw::{Action, Context, Key};
 
+mod font;
 mod matrix;
 mod renderer;
 mod shaders;
-mod font;
 
 pub struct App {
     renderer: renderer::Renderer,
+    should_rerender: bool,
+    window: glfw::Window,
+    text: String,
 }
 
 impl App {
-    fn new(size: glutin::dpi::PhysicalSize<u32>) -> App {
+    fn new(window: glfw::Window ,width: i32, height: i32) -> App {
+        let text = include_str!("text.txt").to_string();
         return App {
-            renderer: renderer::Renderer::new(size),
+            renderer: renderer::Renderer::new(width, height),
+            should_rerender: true,
+            window: window,
+            text: text,
         };
     }
 }
 
-fn main() {
-    let el = EventLoop::new();
-    let wb = WindowBuilder::new().with_title("Megalodon");
 
-    let windowed_context = ContextBuilder::new()
-        .with_vsync(true)
-        .with_gl(glutin::GlRequest::Specific(glutin::Api::OpenGl, (4, 6)))
-        .build_windowed(wb, &el)
-        .unwrap();
-
-    let windowed_context = unsafe { windowed_context.make_current().unwrap() };
-
-    gl::load_with(|ptr| windowed_context.get_proc_address(ptr) as *const _);
-
-    let mut app = App::new(windowed_context.window().inner_size());
-
-
-    el.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
-        match event {
-            Event::LoopDestroyed => return,
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::Resized(physical_size) => {
-                    windowed_context.resize(physical_size);
-                    app.renderer.on_resize(physical_size);
-                }
-                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                WindowEvent::KeyboardInput { .. } => {
-                    windowed_context.window().request_redraw();
-                }
-                _ => (),
-            },
-            Event::RedrawRequested(_) => {
-                let now = std::time::Instant::now();
-                app.renderer.render();
-
-                // app.render(&args, &mut gl);
-                // println!("{}", now.elapsed().as_secs_f64() * 1000.0);
-                windowed_context.swap_buffers().unwrap();
-            }
-            _ => (),
+fn process_event(app: &mut App, event: &glfw::WindowEvent) {
+    match event {
+        glfw::WindowEvent::FramebufferSize(width, height) => {
+            app.renderer.on_resize(width.clone(), height.clone());
+            app.should_rerender = true;
+        },
+        glfw::WindowEvent::Refresh => {
+            app.should_rerender = true;
+        },
+        glfw::WindowEvent::Char(character) => {
+            app.text.push_str(&character.to_string());
+            app.should_rerender = true;
         }
-    });
+        _ => {}
+    }
+}
+
+fn render_app(app: &mut App) {
+    if app.should_rerender {
+        app.renderer.render(&app.text);
+        app.window.swap_buffers();
+
+        app.should_rerender = false;
+    }
+}
+
+fn main() {
+    let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
+
+    let (mut window, events) = glfw
+        .create_window(800, 600, "Hello this is window", glfw::WindowMode::Windowed)
+        .expect("Failed to create GLFW window.");
+
+    window.make_current();
+    window.set_key_polling(true);
+
+    glfw.window_hint(glfw::WindowHint::ContextVersion(3, 3));
+    glfw.window_hint(glfw::WindowHint::OpenGlProfile(glfw::OpenGlProfileHint::Core));
+
+    window.set_key_polling(true);
+    window.set_framebuffer_size_polling(true);
+    window.set_refresh_polling(true);
+    window.set_char_polling(true);
+
+    gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
+
+    let mut app = App::new(window ,800, 600);
+
+    while !app.window.should_close() {
+        glfw.wait_events();
+
+        for (_, event) in glfw::flush_messages(&events) {
+            process_event(&mut app, &event);
+        }
+        render_app(&mut app);
+
+    }
+    return;
+
 }

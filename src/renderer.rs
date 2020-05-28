@@ -1,7 +1,6 @@
 extern crate gl;
 
 use crate::shaders;
-use rusttype::{Font, Point, Scale};
 use std::ffi::CString;
 
 use crate::font;
@@ -10,33 +9,26 @@ use crate::matrix;
 macro_rules! check_error {
     () => {
         let line = line!();
+        let error;
         unsafe {
-            let error = gl::GetError();
-            if error != gl::NO_ERROR {
-                let message = match error {
-                    gl::INVALID_ENUM => "INVALID_ENUM",
-                    gl::INVALID_VALUE => "INVALID_VALUE",
-                    gl::INVALID_OPERATION => "INVALID_OPERATION",
-                    gl::STACK_OVERFLOW => "STACK_OVERFLOW",
-                    gl::STACK_UNDERFLOW => "STACK_UNDERFLOW",
-                    gl::OUT_OF_MEMORY => "OUT_OF_MEMORY",
-                    gl::INVALID_FRAMEBUFFER_OPERATION => "INVALID_FRAMEBUFFER_OPERATION",
-                    _ => "Unknown error",
-                };
-                println!("file: {} error on line {} {}", file!(), line, message);
-            }
+            error = gl::GetError();
+        }
+        if error != gl::NO_ERROR {
+            let message = match error {
+                gl::INVALID_ENUM => "INVALID_ENUM",
+                gl::INVALID_VALUE => "INVALID_VALUE",
+                gl::INVALID_OPERATION => "INVALID_OPERATION",
+                gl::STACK_OVERFLOW => "STACK_OVERFLOW",
+                gl::STACK_UNDERFLOW => "STACK_UNDERFLOW",
+                gl::OUT_OF_MEMORY => "OUT_OF_MEMORY",
+                gl::INVALID_FRAMEBUFFER_OPERATION => "INVALID_FRAMEBUFFER_OPERATION",
+                _ => "Unknown error",
+            };
+            println!("file: {} error on line {} {}", file!(), line, message);
         }
     };
 }
 
-fn init() {
-    unsafe {
-        gl::ClearColor(0.3, 0.3, 0.5, 1.0);
-
-        gl::Enable(gl::BLEND);
-        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-    }
-}
 pub struct Renderer {
     program: shaders::Program,
     projection: matrix::Matrix,
@@ -47,39 +39,44 @@ pub struct Renderer {
     transform_loc: gl::types::GLint,
 }
 
-fn projection_from_size(size: glutin::dpi::PhysicalSize<u32>) -> matrix::Matrix {
+fn projection_from_size(width: i32, height: i32) -> matrix::Matrix {
     matrix::orto(matrix::OrtoParams {
         left: 0.0,
-        right: size.width as f32,
+        right: width as f32,
         top: 0.0,
-        bottom: -(size.height as f32),
+        bottom: -(height as f32),
         far: 1.0,
         near: 0.0,
     })
 }
 
+fn create_shader_program() -> shaders::Program {
+    let vert_shader =
+        shaders::Shader::from_vert_source(&CString::new(include_str!("triangle.vert")).unwrap())
+            .unwrap();
+
+    let frag_shader =
+        shaders::Shader::from_frag_source(&CString::new(include_str!("triangle.frag")).unwrap())
+            .unwrap();
+
+    shaders::Program::from_shaders(&[vert_shader, frag_shader]).unwrap()
+}
+
 impl Renderer {
-    pub fn on_resize(&mut self, size: glutin::dpi::PhysicalSize<u32>) {
-        self.projection = projection_from_size(size);
+    pub fn on_resize(&mut self, width: i32, height: i32) {
+        self.projection = projection_from_size(width, height);
         unsafe {
-            gl::Viewport(0, 0, size.width as i32, size.height as i32);
+            gl::Viewport(0, 0, width as i32, height as i32);
         }
     }
 
-    pub fn new(size: glutin::dpi::PhysicalSize<u32>) -> Renderer {
-        let vert_shader = shaders::Shader::from_vert_source(
-            &CString::new(include_str!("triangle.vert")).unwrap(),
-        )
-        .unwrap();
-
-        let frag_shader = shaders::Shader::from_frag_source(
-            &CString::new(include_str!("triangle.frag")).unwrap(),
-        )
-        .unwrap();
-
-        let shader_program = shaders::Program::from_shaders(&[vert_shader, frag_shader]).unwrap();
-
-        init();
+    pub fn new(width: i32, height: i32) -> Renderer {
+        unsafe {
+            gl::ClearColor(30.0 / 255.0, 30.0 / 255.0, 30.0 / 255.0, 1.0);
+            gl::Enable(gl::BLEND);
+            gl::Enable(gl::MULTISAMPLE);
+            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        }
 
         let mut vbo: gl::types::GLuint = 0;
         unsafe {
@@ -107,12 +104,13 @@ impl Renderer {
             gl::BindVertexArray(0);
         }
 
-        let mut indedx_buffer: gl::types::GLuint = 0;
+        let mut index_buffer: gl::types::GLuint = 0;
         unsafe {
-            gl::GenBuffers(1, &mut indedx_buffer);
+            gl::GenBuffers(1, &mut index_buffer);
         }
 
-        let mut transform_loc = 0;
+        let shader_program = create_shader_program();
+        let transform_loc;
         unsafe {
             transform_loc = gl::GetUniformLocation(
                 shader_program.id,
@@ -125,23 +123,21 @@ impl Renderer {
         }
 
         unsafe {
-            gl::Viewport(0, 0, size.width as i32, size.height as i32);
+            gl::Viewport(0, 0, width as i32, height as i32);
         }
 
         Renderer {
             program: shader_program,
             vao: vao,
             quad_buffer_object: vbo,
-            projection: projection_from_size(size),
-            font_atlas: font::FontAtlas::new(),
-            index_buffer: indedx_buffer,
+            projection: projection_from_size(width, height),
+            font_atlas: font::FontAtlas::new(14.0),
+            index_buffer: index_buffer,
             transform_loc: transform_loc,
         }
     }
 
     fn set_projection(&self) {
-        self.program.set_used();
-
         unsafe {
             gl::UniformMatrix4fv(
                 self.transform_loc,
@@ -152,25 +148,37 @@ impl Renderer {
         }
     }
 
-    pub fn render(&self) {
+    pub fn render(&self, text: &str) {
         self.program.set_used();
         self.set_projection();
 
-        let xpos = 100.0;
-        let ypos = -100.0;
-
-        let text = "glyph";
+        let xpos = 0.0;
+        let ypos = 0.0;
 
         let mut v: Vec<[[f32; 4]; 4]> = Vec::new();
-        let mut advance: f32 = 0.0;
+        v.reserve(text.len());
+
+        let mut line_offset: f32 = 0.0;
+        for line in text.lines() {
+            line_offset += self.font_atlas.advance_height;
+            let mut advance: f32 = 0.0;
+            for char in line.chars() {
+                if char == ' ' {
+                    advance += 10.0;
+                } else if char == '\t' {
+                    advance += 40.0;
+                } else {
+                    // println!("{:?}", char as u32);
+                    let g = self.font_atlas.glyphs.get(&char).unwrap();
+                    v.push(g.quad(xpos + advance, ypos - line_offset));
+                    advance += g.advance_width;
+                }
+            }
+        }
 
         let mut indices: Vec<[i32; 6]> = Vec::new();
-        indices.reserve(text.len());
-
-        for (i, char) in text.chars().enumerate() {
-            let g = self.font_atlas.glyphs.get(&char).unwrap();
-            v.push(g.quad(xpos + advance, ypos));
-            advance += g.advance_width;
+        indices.reserve(v.len());
+        for i in 0..v.len() {
             indices.push(font::AtlasGlyph::indices(i as i32));
         }
 
@@ -178,17 +186,16 @@ impl Renderer {
             gl::BindBuffer(gl::ARRAY_BUFFER, self.quad_buffer_object);
             gl::BufferData(
                 gl::ARRAY_BUFFER,
-                v.len() as isize * std::mem::size_of::<[f32; 24]>() as gl::types::GLsizeiptr,
+                (v.len() * std::mem::size_of::<[[f32; 4]; 4]>()) as gl::types::GLsizeiptr,
                 v.as_ptr() as *const gl::types::GLvoid,
                 gl::DYNAMIC_DRAW,
             );
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
 
             gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.index_buffer);
-
             gl::BufferData(
                 gl::ELEMENT_ARRAY_BUFFER,
-                indices.len() as isize * std::mem::size_of::<[i32; 6]>() as gl::types::GLsizeiptr,
+                (indices.len() * std::mem::size_of::<[i32; 6]>()) as gl::types::GLsizeiptr,
                 indices.as_ptr() as *const gl::types::GLvoid,
                 gl::DYNAMIC_DRAW,
             );
