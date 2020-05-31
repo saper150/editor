@@ -127,6 +127,7 @@ dependencies = [
 name = "editor"
 version = "0.1.0"
 dependencies = [
+ "freetype-rs",
  "gl",
  "glfw",
  "image",
@@ -139,6 +140,28 @@ name = "either"
 version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb1f6b1ce1c140482ea30ddd3335fc0024ac7ee112895426e0a629a6c20adfe3"
+
+[[package]]
+name = "freetype-rs"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e687cf953d7052be94742baf3fc63b1ea21ada7d9b45f7b1918221accebf1ae"
+dependencies = [
+ "bitflags",
+ "freetype-sys",
+ "libc",
+]
+
+[[package]]
+name = "freetype-sys"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7530337a8e76db5271f1b5f81dd5340b0adaea235cb089cefa1928bd0cb9ee71"
+dependencies = [
+ "cmake",
+ "libc",
+ "pkg-config",
+]
 
 [[package]]
 name = "gif"
@@ -376,6 +399,12 @@ checksum = "72cfab9c2775bbb8481678d71a0117718bf8042a79cf9db61125d71e4018690b"
 dependencies = [
  "ttf-parser",
 ]
+
+[[package]]
+name = "pkg-config"
+version = "0.3.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05da548ad6865900e60eaba7f589cc0783590a92e940c26953ff81ddbab2d677"
 
 [[package]]
 name = "png"

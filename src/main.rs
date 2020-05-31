@@ -1,7 +1,7 @@
 extern crate gl;
 
 extern crate glfw;
-use glfw::{Action, Context, Key};
+use glfw::{Context};
 
 mod font;
 mod matrix;
@@ -37,6 +37,25 @@ fn process_event(app: &mut App, event: &glfw::WindowEvent) {
         glfw::WindowEvent::Refresh => {
             app.should_rerender = true;
         },
+        glfw::WindowEvent::Key(key, _scancode, action, _modifiers) => {
+            if *action == glfw::Action::Release {
+                return
+            }
+
+            match key {
+                glfw::Key::Enter => {
+                    app.text.push_str("\n");
+                },
+                glfw::Key::Tab => {
+                    app.text.push_str("    ");
+                },
+                glfw::Key::Backspace => {
+                    app.text.pop();
+                },
+                _ => {},
+            }
+            app.should_rerender = true;
+        },
         glfw::WindowEvent::Char(character) => {
             app.text.push_str(&character.to_string());
             app.should_rerender = true;
@@ -66,8 +85,8 @@ fn main() {
 
     glfw.window_hint(glfw::WindowHint::ContextVersion(3, 3));
     glfw.window_hint(glfw::WindowHint::OpenGlProfile(glfw::OpenGlProfileHint::Core));
+    glfw.window_hint(glfw::WindowHint::Samples(Some(4)));
 
-    window.set_key_polling(true);
     window.set_framebuffer_size_polling(true);
     window.set_refresh_polling(true);
     window.set_char_polling(true);

@@ -22,29 +22,8 @@ pub fn orto(params: OrtoParams) -> Matrix {
         ],
     ]
 
-    // [
-    //     [
-    //         2.0 / (params.right - params.left),
-    //         0.0,
-    //         0.0,
-    //         -((params.right + params.left) / (params.right - params.left)),
-    //     ],
-    //     [
-    //         0.0,
-    //         2.0 / (params.top - params.bottom),
-    //         0.0,
-    //         -((params.top + params.bottom) / (params.top - params.bottom)),
-    //     ],
-    //     [
-    //         0.0,
-    //         0.0,
-    //         -2.0 / (params.far - params.near),
-    //         -((params.far + params.near) / (params.far - params.near)),
-    //     ],
-    //     [0.0, 0.0, 0.0, 1.0],
-    // ]
 }
-
+#[allow(dead_code)]
 pub fn identity() -> Matrix {
     [
         [1.0, 0.0, 0.0, 0.0],

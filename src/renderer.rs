@@ -148,7 +148,7 @@ impl Renderer {
         }
     }
 
-    pub fn render(&self, text: &str) {
+    pub fn render(&mut self, text: &str) {
         self.program.set_used();
         self.set_projection();
 
@@ -163,13 +163,9 @@ impl Renderer {
             line_offset += self.font_atlas.advance_height;
             let mut advance: f32 = 0.0;
             for char in line.chars() {
-                if char == ' ' {
-                    advance += 10.0;
-                } else if char == '\t' {
-                    advance += 40.0;
-                } else {
-                    // println!("{:?}", char as u32);
-                    let g = self.font_atlas.glyphs.get(&char).unwrap();
+                {
+
+                    let g = self.font_atlas.get_glyph(char);
                     v.push(g.quad(xpos + advance, ypos - line_offset));
                     advance += g.advance_width;
                 }
