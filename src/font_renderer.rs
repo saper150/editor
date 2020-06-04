@@ -5,33 +5,10 @@ use std::ffi::CString;
 
 use crate::font;
 use crate::matrix;
+use crate::check_error;
 
-macro_rules! check_error {
-    () => {
-        let line = line!();
-        let error;
-        unsafe {
-            error = gl::GetError();
-        }
-        if error != gl::NO_ERROR {
-            let message = match error {
-                gl::INVALID_ENUM => "INVALID_ENUM",
-                gl::INVALID_VALUE => "INVALID_VALUE",
-                gl::INVALID_OPERATION => "INVALID_OPERATION",
-                gl::STACK_OVERFLOW => "STACK_OVERFLOW",
-                gl::STACK_UNDERFLOW => "STACK_UNDERFLOW",
-                gl::OUT_OF_MEMORY => "OUT_OF_MEMORY",
-                gl::INVALID_FRAMEBUFFER_OPERATION => "INVALID_FRAMEBUFFER_OPERATION",
-                _ => "Unknown error",
-            };
-            println!("file: {} error on line {} {}", file!(), line, message);
-        }
-    };
-}
-
-pub struct Renderer {
+pub struct FontRenderer {
     program: shaders::Program,
-    projection: matrix::Matrix,
     vao: gl::types::GLuint,
     quad_buffer_object: gl::types::GLuint,
     index_buffer: gl::types::GLuint,
@@ -39,16 +16,6 @@ pub struct Renderer {
     transform_loc: gl::types::GLint,
 }
 
-fn projection_from_size(width: i32, height: i32) -> matrix::Matrix {
-    matrix::orto(matrix::OrtoParams {
-        left: 0.0,
-        right: width as f32,
-        top: 0.0,
-        bottom: -(height as f32),
-        far: 1.0,
-        near: 0.0,
-    })
-}
 
 fn create_shader_program() -> shaders::Program {
     let vert_shader =
@@ -62,21 +29,9 @@ fn create_shader_program() -> shaders::Program {
     shaders::Program::from_shaders(&[vert_shader, frag_shader]).unwrap()
 }
 
-impl Renderer {
-    pub fn on_resize(&mut self, width: i32, height: i32) {
-        self.projection = projection_from_size(width, height);
-        unsafe {
-            gl::Viewport(0, 0, width as i32, height as i32);
-        }
-    }
+impl FontRenderer {
 
-    pub fn new(width: i32, height: i32) -> Renderer {
-        unsafe {
-            gl::ClearColor(30.0 / 255.0, 30.0 / 255.0, 30.0 / 255.0, 1.0);
-            gl::Enable(gl::BLEND);
-            gl::Enable(gl::MULTISAMPLE);
-            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-        }
+    pub fn new() -> FontRenderer {
 
         let mut vbo: gl::types::GLuint = 0;
         unsafe {
@@ -122,38 +77,33 @@ impl Renderer {
             }
         }
 
-        unsafe {
-            gl::Viewport(0, 0, width as i32, height as i32);
-        }
-
-        Renderer {
+        FontRenderer {
             program: shader_program,
             vao: vao,
             quad_buffer_object: vbo,
-            projection: projection_from_size(width, height),
-            font_atlas: font::FontAtlas::new(14.0),
+            font_atlas: font::FontAtlas::new(14),
             index_buffer: index_buffer,
             transform_loc: transform_loc,
         }
     }
 
-    fn set_projection(&self) {
+    fn set_projection(&self, projection: &matrix::Matrix) {
         unsafe {
             gl::UniformMatrix4fv(
                 self.transform_loc,
                 1,
                 gl::FALSE,
-                self.projection.as_ptr() as *const f32,
+                projection.as_ptr() as *const f32,
             );
         }
     }
 
-    pub fn render(&mut self, text: &str) {
+    pub fn render(&mut self, text: &str, projection: &matrix::Matrix) {
         self.program.set_used();
-        self.set_projection();
+        self.set_projection(projection);
 
         let xpos = 0.0;
-        let ypos = 0.0;
+        let ypos = -100.0;
 
         let mut v: Vec<[[f32; 4]; 4]> = Vec::new();
         v.reserve(text.len());
@@ -179,6 +129,7 @@ impl Renderer {
         }
 
         unsafe {
+            gl::BlendFunc(gl::SRC1_COLOR, gl::ONE_MINUS_SRC1_COLOR);
             gl::BindBuffer(gl::ARRAY_BUFFER, self.quad_buffer_object);
             gl::BufferData(
                 gl::ARRAY_BUFFER,
@@ -198,7 +149,6 @@ impl Renderer {
         }
 
         unsafe {
-            gl::Clear(gl::COLOR_BUFFER_BIT);
             gl::BindVertexArray(self.vao);
 
             gl::BindTexture(gl::TEXTURE_2D, self.font_atlas.texture);

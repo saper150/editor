@@ -5,23 +5,42 @@ use glfw::{Context};
 
 mod font;
 mod matrix;
-mod renderer;
+mod font_renderer;
 mod shaders;
+mod check_error;
+
+use font_renderer::FontRenderer;
 
 pub struct App {
-    renderer: renderer::Renderer,
+    font_renderer: FontRenderer,
+    projection: matrix::Matrix,
     should_rerender: bool,
     window: glfw::Window,
     text: String,
 }
 
+fn projection_from_size(width: i32, height: i32) -> matrix::Matrix {
+    matrix::orto(matrix::OrtoParams {
+        left: 0.0,
+        right: width as f32,
+        top: 0.0,
+        bottom: -(height as f32),
+        far: 1.0,
+        near: 0.0,
+    })
+}
+
 impl App {
     fn new(window: glfw::Window ,width: i32, height: i32) -> App {
         let text = include_str!("text.txt").to_string();
+        unsafe {
+            gl::Viewport(0, 0, width, height);
+        }
         return App {
-            renderer: renderer::Renderer::new(width, height),
+            font_renderer: FontRenderer::new(),
             should_rerender: true,
             window: window,
+            projection: projection_from_size(width, height),
             text: text,
         };
     }
@@ -31,7 +50,10 @@ impl App {
 fn process_event(app: &mut App, event: &glfw::WindowEvent) {
     match event {
         glfw::WindowEvent::FramebufferSize(width, height) => {
-            app.renderer.on_resize(width.clone(), height.clone());
+            app.projection = projection_from_size(*width, *height);
+            unsafe {
+                gl::Viewport(0, 0, *width, *height);
+            }
             app.should_rerender = true;
         },
         glfw::WindowEvent::Refresh => {
@@ -65,8 +87,12 @@ fn process_event(app: &mut App, event: &glfw::WindowEvent) {
 }
 
 fn render_app(app: &mut App) {
+
     if app.should_rerender {
-        app.renderer.render(&app.text);
+        unsafe {
+            gl::Clear(gl::COLOR_BUFFER_BIT);
+        }
+        app.font_renderer.render(&app.text, &app.projection);
         app.window.swap_buffers();
 
         app.should_rerender = false;
@@ -92,6 +118,14 @@ fn main() {
     window.set_char_polling(true);
 
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
+
+    unsafe {
+        gl::ClearColor(30.0 / 255.0, 30.0 / 255.0, 30.0 / 255.0, 1.0);
+        gl::Enable(gl::BLEND);
+        gl::Enable(gl::MULTISAMPLE);
+        // gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+
+    }
 
     let mut app = App::new(window ,800, 600);
 
