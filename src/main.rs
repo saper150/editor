@@ -5,11 +5,10 @@ use glfw::{Context};
 
 mod font;
 mod matrix;
-mod font_renderer;
 mod shaders;
 mod check_error;
 
-use font_renderer::FontRenderer;
+use font::font_renderer::FontRenderer;
 
 pub struct App {
     font_renderer: FontRenderer,

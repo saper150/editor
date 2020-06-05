@@ -3,7 +3,7 @@ extern crate gl;
 use crate::shaders;
 use std::ffi::CString;
 
-use crate::font;
+use crate::font::font::{FontAtlas, AtlasGlyph};
 use crate::matrix;
 use crate::check_error;
 
@@ -12,18 +12,18 @@ pub struct FontRenderer {
     vao: gl::types::GLuint,
     quad_buffer_object: gl::types::GLuint,
     index_buffer: gl::types::GLuint,
-    font_atlas: font::FontAtlas,
+    font_atlas: FontAtlas,
     transform_loc: gl::types::GLint,
 }
 
 
 fn create_shader_program() -> shaders::Program {
     let vert_shader =
-        shaders::Shader::from_vert_source(&CString::new(include_str!("triangle.vert")).unwrap())
+        shaders::Shader::from_vert_source(&CString::new(include_str!("font.vert")).unwrap())
             .unwrap();
 
     let frag_shader =
-        shaders::Shader::from_frag_source(&CString::new(include_str!("triangle.frag")).unwrap())
+        shaders::Shader::from_frag_source(&CString::new(include_str!("font.frag")).unwrap())
             .unwrap();
 
     shaders::Program::from_shaders(&[vert_shader, frag_shader]).unwrap()
@@ -81,7 +81,7 @@ impl FontRenderer {
             program: shader_program,
             vao: vao,
             quad_buffer_object: vbo,
-            font_atlas: font::FontAtlas::new(14),
+            font_atlas: FontAtlas::new(14),
             index_buffer: index_buffer,
             transform_loc: transform_loc,
         }
@@ -125,7 +125,7 @@ impl FontRenderer {
         let mut indices: Vec<[i32; 6]> = Vec::new();
         indices.reserve(v.len());
         for i in 0..v.len() {
-            indices.push(font::AtlasGlyph::indices(i as i32));
+            indices.push(AtlasGlyph::indices(i as i32));
         }
 
         unsafe {
