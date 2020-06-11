@@ -1,50 +1,20 @@
 extern crate gl;
 
 extern crate glfw;
-use glfw::{Context};
+use glfw::Context;
 
-mod font;
-mod matrix;
-mod shaders;
+mod app;
 mod check_error;
+mod font;
+mod gl_buffer;
+mod matrix;
+mod process_keyboard;
+mod rect;
+mod shaders;
+mod timer;
 
-use font::font_renderer::FontRenderer;
-
-pub struct App {
-    font_renderer: FontRenderer,
-    projection: matrix::Matrix,
-    should_rerender: bool,
-    window: glfw::Window,
-    text: String,
-}
-
-fn projection_from_size(width: i32, height: i32) -> matrix::Matrix {
-    matrix::orto(matrix::OrtoParams {
-        left: 0.0,
-        right: width as f32,
-        top: 0.0,
-        bottom: -(height as f32),
-        far: 1.0,
-        near: 0.0,
-    })
-}
-
-impl App {
-    fn new(window: glfw::Window ,width: i32, height: i32) -> App {
-        let text = include_str!("text.txt").to_string();
-        unsafe {
-            gl::Viewport(0, 0, width, height);
-        }
-        return App {
-            font_renderer: FontRenderer::new(),
-            should_rerender: true,
-            window: window,
-            projection: projection_from_size(width, height),
-            text: text,
-        };
-    }
-}
-
+use app::{projection_from_size, App};
+use rect::rect_renderer::{create_rect, RectRenderer};
 
 fn process_event(app: &mut App, event: &glfw::WindowEvent) {
     match event {
@@ -54,51 +24,72 @@ fn process_event(app: &mut App, event: &glfw::WindowEvent) {
                 gl::Viewport(0, 0, *width, *height);
             }
             app.should_rerender = true;
-        },
+        }
         glfw::WindowEvent::Refresh => {
             app.should_rerender = true;
-        },
-        glfw::WindowEvent::Key(key, _scancode, action, _modifiers) => {
-            if *action == glfw::Action::Release {
-                return
-            }
-
-            match key {
-                glfw::Key::Enter => {
-                    app.text.push_str("\n");
-                },
-                glfw::Key::Tab => {
-                    app.text.push_str("    ");
-                },
-                glfw::Key::Backspace => {
-                    app.text.pop();
-                },
-                _ => {},
-            }
-            app.should_rerender = true;
-        },
-        glfw::WindowEvent::Char(character) => {
-            app.text.push_str(&character.to_string());
-            app.should_rerender = true;
+        }
+        glfw::WindowEvent::Key(key, scancode, action, modifiers) => {
+            process_keyboard::process_keyboard(app, key, scancode, action, modifiers);
+        }
+        glfw::WindowEvent::Char(char) => {
+            process_keyboard::process_char(app, char);
         }
         _ => {}
     }
 }
 
 fn render_app(app: &mut App) {
-
     if app.should_rerender {
         unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT);
         }
-        app.font_renderer.render(&app.text, &app.projection);
-        app.window.swap_buffers();
 
+        {
+            let _e = timer::Timer::new();
+            let p = matrix::mul(&app.projection, &matrix::translate(0.0, -app.scroll.1, 0.0));
+
+            app.font_renderer
+                .render(&app.text, &p, &mut app.quad_index_buffer);
+
+            let char_width = 8.0;
+
+            let width = 2.0;
+            let height = app.font_renderer.font_atlas.advance_height;
+
+            let mut x = char_width * app.cursor_position.x as f32;
+            let y = (height * (app.cursor_position.y + 2) as f32)
+                - (app.font_renderer.font_atlas.face.ascender() >> 6) as f32;
+
+            let tabs_count = app
+                .text
+                .line(app.cursor_position.y)
+                .chars()
+                .take(app.cursor_position.x)
+                .fold(0, |acc, c| if c == '\t' { acc + 1 } else { acc });
+
+            x += tabs_count as f32 * char_width * 3.0;
+
+            app.rect_renderer.render(
+                &create_rect(x, -y, width, -height, [1.0, 1.0, 1.0, 1.0]),
+                &p,
+                &mut app.quad_index_buffer,
+            )
+        }
+
+        app.window.swap_buffers();
         app.should_rerender = false;
     }
 }
 
 fn main() {
+    // println!(
+    //     "{:#?}",
+    //     matrix::mul(
+    //         matrix::translate(5.0, 5.0, 0.0),
+    //         matrix::translate(0.0, 5.0, 0.0)
+    //     )
+    // );
+
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
 
     let (mut window, events) = glfw
@@ -109,7 +100,9 @@ fn main() {
     window.set_key_polling(true);
 
     glfw.window_hint(glfw::WindowHint::ContextVersion(3, 3));
-    glfw.window_hint(glfw::WindowHint::OpenGlProfile(glfw::OpenGlProfileHint::Core));
+    glfw.window_hint(glfw::WindowHint::OpenGlProfile(
+        glfw::OpenGlProfileHint::Core,
+    ));
     glfw.window_hint(glfw::WindowHint::Samples(Some(4)));
 
     window.set_framebuffer_size_polling(true);
@@ -122,11 +115,9 @@ fn main() {
         gl::ClearColor(30.0 / 255.0, 30.0 / 255.0, 30.0 / 255.0, 1.0);
         gl::Enable(gl::BLEND);
         gl::Enable(gl::MULTISAMPLE);
-        // gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-
     }
 
-    let mut app = App::new(window ,800, 600);
+    let mut app = App::new(window, 800, 600);
 
     while !app.window.should_close() {
         glfw.wait_events();
@@ -135,8 +126,6 @@ fn main() {
             process_event(&mut app, &event);
         }
         render_app(&mut app);
-
     }
     return;
-
 }

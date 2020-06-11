@@ -1,21 +1,22 @@
+extern crate freetype as ft;
 extern crate gl;
 
 use crate::shaders;
 use std::ffi::CString;
 
-use crate::font::font::{FontAtlas, AtlasGlyph};
-use crate::matrix;
 use crate::check_error;
+use crate::font::font::FontAtlas;
+use crate::gl_buffer::QuadIndexBuffer;
+use crate::matrix;
 
 pub struct FontRenderer {
     program: shaders::Program,
     vao: gl::types::GLuint,
     quad_buffer_object: gl::types::GLuint,
-    index_buffer: gl::types::GLuint,
-    font_atlas: FontAtlas,
+    quad_buffer_size: usize,
+    pub font_atlas: FontAtlas,
     transform_loc: gl::types::GLint,
 }
-
 
 fn create_shader_program() -> shaders::Program {
     let vert_shader =
@@ -30,9 +31,7 @@ fn create_shader_program() -> shaders::Program {
 }
 
 impl FontRenderer {
-
     pub fn new() -> FontRenderer {
-
         let mut vbo: gl::types::GLuint = 0;
         unsafe {
             gl::GenBuffers(1, &mut vbo);
@@ -59,11 +58,6 @@ impl FontRenderer {
             gl::BindVertexArray(0);
         }
 
-        let mut index_buffer: gl::types::GLuint = 0;
-        unsafe {
-            gl::GenBuffers(1, &mut index_buffer);
-        }
-
         let shader_program = create_shader_program();
         let transform_loc;
         unsafe {
@@ -81,8 +75,8 @@ impl FontRenderer {
             program: shader_program,
             vao: vao,
             quad_buffer_object: vbo,
+            quad_buffer_size: 0,
             font_atlas: FontAtlas::new(14),
-            index_buffer: index_buffer,
             transform_loc: transform_loc,
         }
     }
@@ -98,69 +92,88 @@ impl FontRenderer {
         }
     }
 
-    pub fn render(&mut self, text: &str, projection: &matrix::Matrix) {
-        self.program.set_used();
-        self.set_projection(projection);
+    fn fill_quads(&mut self, text: &ropey::Rope) -> usize {
+        unsafe {
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.quad_buffer_object);
+        }
+
+        let car_count = text.chars().count();
+        if self.quad_buffer_size < car_count {
+            unsafe {
+                gl::BufferData(
+                    gl::ARRAY_BUFFER,
+                    (car_count * 2 * std::mem::size_of::<[[f32; 4]; 4]>()) as gl::types::GLsizeiptr,
+                    std::ptr::null(),
+                    gl::DYNAMIC_DRAW,
+                );
+            }
+            self.quad_buffer_size = car_count * 2;
+        }
 
         let xpos = 0.0;
-        let ypos = -100.0;
-
-        let mut v: Vec<[[f32; 4]; 4]> = Vec::new();
-        v.reserve(text.len());
+        let ypos = 0.0;
 
         let mut line_offset: f32 = 0.0;
+
+        let mut i: usize = 0;
+        let b;
+        unsafe {
+            b = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY) as *mut [[f32; 4]; 4];
+        }
+
         for line in text.lines() {
             line_offset += self.font_atlas.advance_height;
             let mut advance: f32 = 0.0;
             for char in line.chars() {
-                {
-
+                if char == '\t' {
+                    let g = self.font_atlas.get_glyph(' ');
+                    advance += g.advance_width * 4.0;
+                } else {
                     let g = self.font_atlas.get_glyph(char);
-                    v.push(g.quad(xpos + advance, ypos - line_offset));
+                    unsafe {
+                        *b.offset(i as isize) = g.quad(xpos + advance, ypos - line_offset);
+                    }
+                    i += 1;
                     advance += g.advance_width;
                 }
             }
         }
 
-        let mut indices: Vec<[i32; 6]> = Vec::new();
-        indices.reserve(v.len());
-        for i in 0..v.len() {
-            indices.push(AtlasGlyph::indices(i as i32));
-        }
-
         unsafe {
-            gl::BlendFunc(gl::SRC1_COLOR, gl::ONE_MINUS_SRC1_COLOR);
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.quad_buffer_object);
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                (v.len() * std::mem::size_of::<[[f32; 4]; 4]>()) as gl::types::GLsizeiptr,
-                v.as_ptr() as *const gl::types::GLvoid,
-                gl::DYNAMIC_DRAW,
-            );
-            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.index_buffer);
-            gl::BufferData(
-                gl::ELEMENT_ARRAY_BUFFER,
-                (indices.len() * std::mem::size_of::<[i32; 6]>()) as gl::types::GLsizeiptr,
-                indices.as_ptr() as *const gl::types::GLvoid,
-                gl::DYNAMIC_DRAW,
-            );
+            gl::UnmapBuffer(gl::ARRAY_BUFFER);
         }
+        i
+    }
+
+    pub fn render(
+        &mut self,
+        text: &ropey::Rope,
+        projection: &matrix::Matrix,
+        index_buffer: &mut QuadIndexBuffer,
+    ) {
+        self.program.set_used();
+        self.set_projection(projection);
+
+        let size = self.fill_quads(text);
+        index_buffer.ensure_size(size as u32);
 
         unsafe {
             gl::BindVertexArray(self.vao);
+            gl::BlendFunc(gl::SRC1_COLOR, gl::ONE_MINUS_SRC1_COLOR);
 
             gl::BindTexture(gl::TEXTURE_2D, self.font_atlas.texture);
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.index_buffer);
+
+            index_buffer.bind();
 
             gl::DrawElements(
                 gl::TRIANGLES,
-                indices.len() as i32 * 6,
+                (size * 6) as i32,
                 gl::UNSIGNED_INT,
                 std::ptr::null(),
             );
+            index_buffer.unbind();
         }
+
         check_error!();
     }
 }

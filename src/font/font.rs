@@ -24,38 +24,24 @@ impl AtlasGlyph {
         let x = xpos + self.bearing[0];
         let y = ypos + self.bearing[1];
 
-        let scale = 0.0;
-
-
-        let bottom_left = [x, y + scale, self.uv.bottom_left.0, self.uv.bottom_left.1];
+        let bottom_left = [x, y, self.uv.bottom_left.0, self.uv.bottom_left.1];
 
         let top_left = [x, y - self.size[1], self.uv.top_left.0, self.uv.top_left.1];
 
         let top_right = [
-            x + self.size[0] + scale,
+            x + self.size[0],
             y - self.size[1],
             self.uv.top_right.0,
             self.uv.top_right.1,
         ];
         let bottom_right = [
-            x + self.size[0] + scale,
-            y + scale,
+            x + self.size[0],
+            y,
             self.uv.bottom_right.0,
             self.uv.bottom_right.1,
         ];
 
         [bottom_left, top_left, top_right, bottom_right]
-    }
-
-    pub fn indices(index: i32) -> [i32; 6] {
-        [
-            0 + index * 4,
-            1 + index * 4,
-            2 + index * 4,
-            0 + index * 4,
-            2 + index * 4,
-            3 + index * 4,
-        ]
     }
 }
 
@@ -68,7 +54,7 @@ pub struct FontAtlas {
     texture_width: i32,
     occupied_width: i32,
 
-    face: ft::Face,
+    pub face: ft::Face,
 }
 
 impl FontAtlas {
@@ -77,12 +63,13 @@ impl FontAtlas {
         let cache_height = 100;
 
         let texture = generate_texture(cache_width, cache_height);
-        
+
         let library = ft::Library::init().unwrap();
         library.set_lcd_filter(ft::LcdFilter::LcdFilterDefault).unwrap();
-        let face = library.new_face("./assets/MonacoB.ttf", 0).unwrap();
+        let face = library.new_face("./assets/hack.ttf", 0).unwrap();
 
         face.set_pixel_sizes(0, scale).unwrap();
+
 
         FontAtlas {
             texture: texture,

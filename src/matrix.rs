@@ -1,6 +1,5 @@
 pub type Matrix = [[f32; 4]; 4];
 
-
 pub struct OrtoParams {
     pub left: f32,
     pub right: f32,
@@ -22,8 +21,30 @@ pub fn orto(params: OrtoParams) -> Matrix {
             1.0,
         ],
     ]
-
 }
+
+pub fn translate(x: f32, y: f32, z: f32) -> Matrix {
+    [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [x, y, z, 1.0],
+    ]
+}
+
+pub fn mul(a: &Matrix, b: &Matrix) -> Matrix {
+    let mut m: Matrix = [[0.0; 4]; 4];
+
+    for i in 0..4 {
+        for j in 0..4 {
+            for k in 0..4 {
+                m[j][i] += a[k][i] * b[j][k];
+            }
+        }
+    }
+    m
+}
+
 #[allow(dead_code)]
 pub fn identity() -> Matrix {
     [
