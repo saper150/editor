@@ -7,6 +7,7 @@ pub struct Timer {
 }
 
 impl Timer {
+	#[allow(dead_code)]
 	pub fn new() -> Timer {
 		Timer {
 			timer: Instant::now()

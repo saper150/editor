@@ -5,16 +5,38 @@ use crate::check_error;
 use crate::gl_buffer::QuadIndexBuffer;
 use crate::matrix;
 
-type Rect = [[f32; 6]; 4];
+// type Rect = [[f32; 6]; 4];
 
-pub fn create_rect(x: f32, y: f32, width: f32, height: f32, color: [f32; 4]) -> Rect {
-    let top_left = [x, y, color[0], color[1], color[2], color[3]];
-    let top_right = [x + width, y, color[0], color[1], color[2], color[3]];
-    let bottom_right = [x + width, y + height, color[0], color[1], color[2], color[3]];
-    let bottom_left = [x, y + height, color[0], color[1], color[2], color[3]];
-
-    [bottom_left, top_left, top_right, bottom_right]
+#[repr(C)]
+pub struct RR {
+    pos: [f32; 2],
+    dimensions: [f32; 2],
+    color: [f32; 3],
 }
+
+pub fn create_rect(x: f32, y: f32, width: f32, height: f32, color: [f32; 3]) -> RR {
+    RR {
+        pos: [x, y],
+        dimensions: [width, height],
+        color: color,
+    }
+}
+
+// pub fn create_rect(x: f32, y: f32, width: f32, height: f32, color: [f32; 4]) -> Rect {
+//     let top_left = [x, y, color[0], color[1], color[2], color[3]];
+//     let top_right = [x + width, y, color[0], color[1], color[2], color[3]];
+//     let bottom_right = [
+//         x + width,
+//         y + height,
+//         color[0],
+//         color[1],
+//         color[2],
+//         color[3],
+//     ];
+//     let bottom_left = [x, y + height, color[0], color[1], color[2], color[3]];
+
+//     [bottom_left, top_left, top_right, bottom_right]
+// }
 
 pub struct RectRenderer {
     program: shaders::Program,
@@ -50,28 +72,57 @@ impl RectRenderer {
         unsafe {
             gl::BindVertexArray(vao);
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+            // gl::EnableVertexAttribArray(0);
+            // gl::VertexAttribPointer(
+            //     0,
+            //     2,
+            //     gl::FLOAT,
+            //     gl::FALSE,
+            //     (6 * std::mem::size_of::<f32>()) as gl::types::GLint,
+            //     std::ptr::null(),
+            // );
+
             gl::EnableVertexAttribArray(0);
             gl::VertexAttribPointer(
                 0,
                 2,
                 gl::FLOAT,
                 gl::FALSE,
-                (6 * std::mem::size_of::<f32>()) as gl::types::GLint,
+                std::mem::size_of::<RR>() as gl::types::GLint,
                 std::ptr::null(),
             );
+            gl::VertexAttribDivisor(0, 1);
+            check_error!();
 
             gl::EnableVertexAttribArray(1);
+            check_error!();
+
             gl::VertexAttribPointer(
                 1,
+                2,
+                gl::FLOAT,
+                gl::FALSE,
+                std::mem::size_of::<RR>() as gl::types::GLint,
+                (2 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
+            );
+            check_error!();
+
+            gl::VertexAttribDivisor(1, 1);
+            check_error!();
+            gl::EnableVertexAttribArray(2);
+            gl::VertexAttribPointer(
+                2,
                 3,
                 gl::FLOAT,
                 gl::FALSE,
-                (6 * std::mem::size_of::<f32>()) as gl::types::GLint,
-                (2 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
+                std::mem::size_of::<RR>() as gl::types::GLint,
+                (4 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
             );
+            gl::VertexAttribDivisor(2, 1);
+            check_error!();
 
-            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-            gl::BindVertexArray(0);
+            // gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+            // gl::BindVertexArray(0);
         }
 
         let shader_program = create_shader_program();
@@ -108,7 +159,7 @@ impl RectRenderer {
 
     pub fn render(
         &mut self,
-        rect: &Rect,
+        rect: &RR,
         projection: &matrix::Matrix,
         index_buffer: &mut QuadIndexBuffer,
     ) {
@@ -121,26 +172,23 @@ impl RectRenderer {
             gl::BindBuffer(gl::ARRAY_BUFFER, self.quad_buffer_object);
             gl::BufferData(
                 gl::ARRAY_BUFFER,
-                std::mem::size_of::<Rect>() as isize,
-                rect.as_ptr() as *const gl::types::GLvoid,
-                gl::DYNAMIC_DRAW,
+                std::mem::size_of::<RR>() as isize,
+                rect as *const RR as *const gl::types::GLvoid,
+                gl::STREAM_DRAW,
             );
+            check_error!();
         }
 
         index_buffer.ensure_size(size as u32);
 
         unsafe {
-			gl::BindVertexArray(self.vao); 
+            gl::BindVertexArray(self.vao);
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
 
             index_buffer.bind();
 
-            gl::DrawElements(
-                gl::TRIANGLES,
-                (size * 6) as i32,
-                gl::UNSIGNED_INT,
-                std::ptr::null(),
-            );
+            gl::DrawElementsInstanced(gl::TRIANGLES, 6, gl::UNSIGNED_INT, std::ptr::null(), 1);
+
             index_buffer.unbind();
         }
 

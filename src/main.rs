@@ -12,9 +12,10 @@ mod process_keyboard;
 mod rect;
 mod shaders;
 mod timer;
+mod undo;
 
 use app::{projection_from_size, App};
-use rect::rect_renderer::{create_rect, RectRenderer};
+use rect::rect_renderer::{create_rect};
 
 fn process_event(app: &mut App, event: &glfw::WindowEvent) {
     match event {
@@ -45,7 +46,7 @@ fn render_app(app: &mut App) {
         }
 
         {
-            let _e = timer::Timer::new();
+            // let _e = timer::Timer::new();
             let p = matrix::mul(&app.projection, &matrix::translate(0.0, -app.scroll.1, 0.0));
 
             app.font_renderer
@@ -62,15 +63,15 @@ fn render_app(app: &mut App) {
 
             let tabs_count = app
                 .text
-                .line(app.cursor_position.y)
+                .line(app.cursor_position.y as usize)
                 .chars()
-                .take(app.cursor_position.x)
+                .take(app.cursor_position.x as usize)
                 .fold(0, |acc, c| if c == '\t' { acc + 1 } else { acc });
 
             x += tabs_count as f32 * char_width * 3.0;
 
             app.rect_renderer.render(
-                &create_rect(x, -y, width, -height, [1.0, 1.0, 1.0, 1.0]),
+                &create_rect(x, y, width, height, [1.0, 1.0, 1.0]),
                 &p,
                 &mut app.quad_index_buffer,
             )
@@ -82,13 +83,6 @@ fn render_app(app: &mut App) {
 }
 
 fn main() {
-    // println!(
-    //     "{:#?}",
-    //     matrix::mul(
-    //         matrix::translate(5.0, 5.0, 0.0),
-    //         matrix::translate(0.0, 5.0, 0.0)
-    //     )
-    // );
 
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
 

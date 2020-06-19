@@ -45,14 +45,14 @@ impl FontRenderer {
         unsafe {
             gl::BindVertexArray(vao);
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            gl::EnableVertexAttribArray(0); // this is "layout (location = 0)" in vertex shader
+            gl::EnableVertexAttribArray(0);
             gl::VertexAttribPointer(
-                0,         // index of the generic vertex attribute ("layout (location = 0)")
-                4,         // the number of components per generic vertex attribute
-                gl::FLOAT, // data type
-                gl::FALSE, // normalized (int-to-float conversion)
-                (4 * std::mem::size_of::<f32>()) as gl::types::GLint, // stride (byte offset between consecutive attributes)
-                std::ptr::null(), // offset of the first component
+                0,
+                4,
+                gl::FLOAT,
+                gl::FALSE,
+                (4 * std::mem::size_of::<f32>()) as gl::types::GLint,
+                std::ptr::null(),
             );
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
             gl::BindVertexArray(0);
@@ -131,7 +131,7 @@ impl FontRenderer {
                 } else {
                     let g = self.font_atlas.get_glyph(char);
                     unsafe {
-                        *b.offset(i as isize) = g.quad(xpos + advance, ypos - line_offset);
+                        *b.offset(i as isize) = g.quad(xpos + advance, ypos + line_offset);
                     }
                     i += 1;
                     advance += g.advance_width;

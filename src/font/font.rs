@@ -22,15 +22,15 @@ pub struct AtlasGlyph {
 impl AtlasGlyph {
     pub fn quad(&self, xpos: f32, ypos: f32) -> [[f32; 4]; 4] {
         let x = xpos + self.bearing[0];
-        let y = ypos + self.bearing[1];
+        let y = ypos - self.bearing[1];
 
         let bottom_left = [x, y, self.uv.bottom_left.0, self.uv.bottom_left.1];
 
-        let top_left = [x, y - self.size[1], self.uv.top_left.0, self.uv.top_left.1];
+        let top_left = [x, y + self.size[1], self.uv.top_left.0, self.uv.top_left.1];
 
         let top_right = [
             x + self.size[0],
-            y - self.size[1],
+            y + self.size[1],
             self.uv.top_right.0,
             self.uv.top_right.1,
         ];
@@ -179,7 +179,8 @@ impl FontAtlas {
     }
 }
 
-fn generate_texture(width: i32, height: i32) -> gl::types::GLuint {
+
+fn  generate_texture(width: i32, height: i32) -> gl::types::GLuint {
     let mut texture: gl::types::GLuint = 0;
 
     unsafe {

@@ -38,7 +38,6 @@ impl QuadIndexBuffer {
         if size as gl::types::GLsizeiptr <= self.size {
             return;
         }
-        println!("resize");
         self.size = (size * 2) as gl::types::GLsizeiptr;
         let mut indices: Vec<QuadIndices> = Vec::new();
         indices.reserve(self.size as usize);

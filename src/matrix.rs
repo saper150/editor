@@ -12,7 +12,7 @@ pub struct OrtoParams {
 pub fn orto(params: OrtoParams) -> Matrix {
     [
         [2.0 / (params.right - params.left), 0.0, 0.0, 0.0],
-        [0.0, 2.0 / (params.top - params.bottom), 0.0, 0.0],
+        [0.0, -2.0 / (params.top - params.bottom), 0.0, 0.0],
         [0.0, 0.0, -2.0 / (params.far - params.near), 0.0],
         [
             -((params.right + params.left) / (params.right - params.left)),

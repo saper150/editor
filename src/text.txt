@@ -1,18 +1,1 @@
-extern crate gl;
-
-use crate::check_error;
-0123456789
-
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-tttttttttt
-GGGGGGGGGGG
-
-GLBuffer
-
-pub struct GLBuffer<T> {
-	buffer_id: gl::types::GLuint,
-	buffer_type: gl::types::GLenum,
-    pub size: gl::types::GLsizeiptr,
-    capacity: gl::types::GLsizeiptr,
-    generic_type: std::marker::PhantomData<T>,
-}
+###
