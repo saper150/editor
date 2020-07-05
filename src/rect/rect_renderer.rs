@@ -2,46 +2,28 @@ use crate::shaders;
 use std::ffi::CString;
 
 use crate::check_error;
-use crate::gl_buffer::QuadIndexBuffer;
 use crate::matrix;
 
-// type Rect = [[f32; 6]; 4];
-
 #[repr(C)]
-pub struct RR {
+pub struct RectInstance {
     pos: [f32; 2],
     dimensions: [f32; 2],
     color: [f32; 3],
 }
 
-pub fn create_rect(x: f32, y: f32, width: f32, height: f32, color: [f32; 3]) -> RR {
-    RR {
+pub fn create_rect(x: f32, y: f32, width: f32, height: f32, color: [f32; 3]) -> RectInstance {
+    RectInstance {
         pos: [x, y],
         dimensions: [width, height],
         color: color,
     }
 }
 
-// pub fn create_rect(x: f32, y: f32, width: f32, height: f32, color: [f32; 4]) -> Rect {
-//     let top_left = [x, y, color[0], color[1], color[2], color[3]];
-//     let top_right = [x + width, y, color[0], color[1], color[2], color[3]];
-//     let bottom_right = [
-//         x + width,
-//         y + height,
-//         color[0],
-//         color[1],
-//         color[2],
-//         color[3],
-//     ];
-//     let bottom_left = [x, y + height, color[0], color[1], color[2], color[3]];
-
-//     [bottom_left, top_left, top_right, bottom_right]
-// }
-
 pub struct RectRenderer {
     program: shaders::Program,
     vao: gl::types::GLuint,
-    quad_buffer_object: gl::types::GLuint,
+    instance_buffer_object: gl::types::GLuint,
+    index_buffer: gl::types::GLuint,
     transform_loc: gl::types::GLint,
 }
 
@@ -69,18 +51,24 @@ impl RectRenderer {
             gl::GenVertexArrays(1, &mut vao);
         }
 
+        let mut index_buffer: gl::types::GLuint = 0;
+        unsafe {
+            gl::GenBuffers(1, &mut index_buffer);
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, index_buffer);
+
+            let indices = [0, 1, 2, 0, 2, 3];
+
+            gl::BufferData(
+                gl::ELEMENT_ARRAY_BUFFER,
+                std::mem::size_of_val(&indices) as gl::types::GLsizeiptr,
+                indices.as_ptr() as *const gl::types::GLvoid,
+                gl::STATIC_DRAW,
+            );
+        }
+
         unsafe {
             gl::BindVertexArray(vao);
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            // gl::EnableVertexAttribArray(0);
-            // gl::VertexAttribPointer(
-            //     0,
-            //     2,
-            //     gl::FLOAT,
-            //     gl::FALSE,
-            //     (6 * std::mem::size_of::<f32>()) as gl::types::GLint,
-            //     std::ptr::null(),
-            // );
 
             gl::EnableVertexAttribArray(0);
             gl::VertexAttribPointer(
@@ -88,41 +76,34 @@ impl RectRenderer {
                 2,
                 gl::FLOAT,
                 gl::FALSE,
-                std::mem::size_of::<RR>() as gl::types::GLint,
+                std::mem::size_of::<RectInstance>() as gl::types::GLint,
                 std::ptr::null(),
             );
             gl::VertexAttribDivisor(0, 1);
             check_error!();
 
             gl::EnableVertexAttribArray(1);
-            check_error!();
 
             gl::VertexAttribPointer(
                 1,
                 2,
                 gl::FLOAT,
                 gl::FALSE,
-                std::mem::size_of::<RR>() as gl::types::GLint,
+                std::mem::size_of::<RectInstance>() as gl::types::GLint,
                 (2 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
             );
-            check_error!();
 
             gl::VertexAttribDivisor(1, 1);
-            check_error!();
             gl::EnableVertexAttribArray(2);
             gl::VertexAttribPointer(
                 2,
                 3,
                 gl::FLOAT,
                 gl::FALSE,
-                std::mem::size_of::<RR>() as gl::types::GLint,
+                std::mem::size_of::<RectInstance>() as gl::types::GLint,
                 (4 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
             );
             gl::VertexAttribDivisor(2, 1);
-            check_error!();
-
-            // gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-            // gl::BindVertexArray(0);
         }
 
         let shader_program = create_shader_program();
@@ -140,7 +121,8 @@ impl RectRenderer {
 
         RectRenderer {
             program: shader_program,
-            quad_buffer_object: vbo,
+            instance_buffer_object: vbo,
+            index_buffer: index_buffer,
             transform_loc: transform_loc,
             vao: vao,
         }
@@ -157,39 +139,34 @@ impl RectRenderer {
         }
     }
 
-    pub fn render(
-        &mut self,
-        rect: &RR,
-        projection: &matrix::Matrix,
-        index_buffer: &mut QuadIndexBuffer,
-    ) {
+    pub fn render(&mut self, rect: &Vec<RectInstance>, projection: &matrix::Matrix) {
         self.program.set_used();
         self.set_projection(projection);
 
-        let size = 1;
 
         unsafe {
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.quad_buffer_object);
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.instance_buffer_object);
             gl::BufferData(
                 gl::ARRAY_BUFFER,
-                std::mem::size_of::<RR>() as isize,
-                rect as *const RR as *const gl::types::GLvoid,
-                gl::STREAM_DRAW,
+                (std::mem::size_of::<RectInstance>() * rect.len()) as isize,
+                rect.as_ptr() as *const gl::types::GLvoid,
+                gl::DYNAMIC_DRAW,
             );
             check_error!();
         }
 
-        index_buffer.ensure_size(size as u32);
-
         unsafe {
             gl::BindVertexArray(self.vao);
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.index_buffer);
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
 
-            index_buffer.bind();
-
-            gl::DrawElementsInstanced(gl::TRIANGLES, 6, gl::UNSIGNED_INT, std::ptr::null(), 1);
-
-            index_buffer.unbind();
+            gl::DrawElementsInstanced(
+                gl::TRIANGLES,
+                6,
+                gl::UNSIGNED_INT,
+                std::ptr::null(),
+                rect.len() as i32,
+            );
         }
 
         check_error!();

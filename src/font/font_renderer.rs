@@ -10,11 +10,15 @@ use crate::gl_buffer::QuadIndexBuffer;
 use crate::matrix;
 
 pub struct FontRenderer {
+    pub char_width: f32,
+    pub advance_height: f32,
+    pub ascender: f32,
+
+    font_atlas: FontAtlas,
     program: shaders::Program,
     vao: gl::types::GLuint,
     quad_buffer_object: gl::types::GLuint,
     quad_buffer_size: usize,
-    pub font_atlas: FontAtlas,
     transform_loc: gl::types::GLint,
 }
 
@@ -71,12 +75,22 @@ impl FontRenderer {
             }
         }
 
+        let mut atlas = FontAtlas::new(14);
+        let char_with = atlas.get_glyph(' ').advance_width;
+        let advance_height = atlas.advance_height;
+
+        let ascender = (atlas.face.ascender() >> 6) as f32;
+
         FontRenderer {
+            char_width: char_with,
+            advance_height: advance_height,
+            ascender: ascender,
+
             program: shader_program,
             vao: vao,
             quad_buffer_object: vbo,
             quad_buffer_size: 0,
-            font_atlas: FontAtlas::new(14),
+            font_atlas: atlas,
             transform_loc: transform_loc,
         }
     }
@@ -92,12 +106,14 @@ impl FontRenderer {
         }
     }
 
-    fn fill_quads(&mut self, text: &ropey::Rope) -> usize {
+    fn fill_quads(&mut self, text: &ropey::Rope, range: std::ops::Range<usize>) -> usize {
         unsafe {
             gl::BindBuffer(gl::ARRAY_BUFFER, self.quad_buffer_object);
         }
 
-        let car_count = text.chars().count();
+        let lines = text.lines_at(range.start).take(range.end - range.start);
+
+        let car_count = lines.clone().map(|x| { x.len_chars() }).sum();
         if self.quad_buffer_size < car_count {
             unsafe {
                 gl::BufferData(
@@ -113,7 +129,7 @@ impl FontRenderer {
         let xpos = 0.0;
         let ypos = 0.0;
 
-        let mut line_offset: f32 = 0.0;
+        let mut line_offset: f32 = range.start as f32 * self.font_atlas.advance_height;
 
         let mut i: usize = 0;
         let b;
@@ -121,7 +137,7 @@ impl FontRenderer {
             b = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY) as *mut [[f32; 4]; 4];
         }
 
-        for line in text.lines() {
+        for line in lines {
             line_offset += self.font_atlas.advance_height;
             let mut advance: f32 = 0.0;
             for char in line.chars() {
@@ -148,13 +164,14 @@ impl FontRenderer {
     pub fn render(
         &mut self,
         text: &ropey::Rope,
+        range: std::ops::Range<usize>,
         projection: &matrix::Matrix,
         index_buffer: &mut QuadIndexBuffer,
     ) {
         self.program.set_used();
         self.set_projection(projection);
 
-        let size = self.fill_quads(text);
+        let size = self.fill_quads(text, range);
         index_buffer.ensure_size(size as u32);
 
         unsafe {

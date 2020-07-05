@@ -6,38 +6,24 @@ use crate::gl_buffer;
 use crate::matrix;
 use crate::rect;
 use crate::undo;
+use crate::cursor;
 
 use font::font_renderer::FontRenderer;
 use rect::rect_renderer::RectRenderer;
-#[derive(Copy, Clone, Debug)]
-pub struct CursorPosition {
-    pub x: i64,
-    pub y: i64,
-    pub remembered_x: i64,
-}
-
-impl CursorPosition {
-    pub fn new() -> CursorPosition {
-        CursorPosition {
-            x: 0,
-            y: 0,
-            remembered_x: 0,
-        }
-    }
-}
+use cursor::{Cursor, Point};
 
 pub struct App {
     pub font_renderer: FontRenderer,
     pub rect_renderer: RectRenderer,
     pub projection: matrix::Matrix,
-    pub cursor_position: CursorPosition,
-    pub scroll: (f32, f32),
+    pub cursor: Cursor,
+    pub scroll: (i64, i64),
     pub quad_index_buffer: gl_buffer::QuadIndexBuffer,
     pub should_rerender: bool,
     pub window: glfw::Window,
     pub text: ropey::Rope,
     pub undo: undo::UndoState,
-    pub selection: Option<(i64, i64)>
+    pub selection: Option<Point>
 }
 
 pub fn projection_from_size(width: i32, height: i32) -> matrix::Matrix {
@@ -49,6 +35,13 @@ pub fn projection_from_size(width: i32, height: i32) -> matrix::Matrix {
         far: 1.0,
         near: 0.0,
     })
+}
+
+pub fn visible_range(app: &App) -> std::ops::Range<usize> {
+    let (_, y_size) = app.window.get_framebuffer_size();
+    let (_, scroll_y) = app.scroll;
+
+    scroll_y as usize..scroll_y as usize + ((y_size as f32) / app.font_renderer.advance_height).ceil() as usize
 }
 
 impl App {
@@ -63,8 +56,8 @@ impl App {
             rect_renderer: RectRenderer::new(),
             should_rerender: true,
             window: window,
-            cursor_position: CursorPosition::new(),
-            scroll: (0.0, 0.0),
+            cursor: Cursor::new(),
+            scroll: (0, 0),
             projection: projection_from_size(width, height),
             quad_index_buffer: gl_buffer::QuadIndexBuffer::new(1000),
             undo: undo::UndoState::new(text.clone()),
@@ -73,3 +66,4 @@ impl App {
         };
     }
 }
+

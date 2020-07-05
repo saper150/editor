@@ -10,6 +10,7 @@ edition = "2018"
 
 
 [dependencies]
+syntect = "4.2"
 gl = "0.11.0"
 ropey = "1.0.0"
 glfw = "0.37.0"

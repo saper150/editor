@@ -1,11 +1,13 @@
 use crate::app;
+use crate::cursor;
 
-use app::{App, CursorPosition};
+use app::{App};
+use cursor::{Cursor, Point};
 
 #[derive(Clone, Debug)]
 pub struct UndoPoint {
     pub text: ropey::Rope,
-    pub cursor_position: CursorPosition,
+    pub cursor: Cursor,
 }
 
 pub struct UndoState {
@@ -18,11 +20,7 @@ impl UndoState {
         UndoState {
             history: vec![UndoPoint {
                 text: initial,
-                cursor_position: CursorPosition {
-                    x: 0,
-                    y: 0,
-                    remembered_x: 0,
-                },
+                cursor: Cursor::new(),
             }],
             index: 1,
         }
@@ -51,19 +49,19 @@ impl Range {
 fn create_undo_from_current(app: &App) -> UndoPoint {
     UndoPoint {
         text: app.text.clone(),
-        cursor_position: app.cursor_position.clone(),
+        cursor: app.cursor.clone(),
     }
 }
 
 fn apply_undo(app: &mut App, point: UndoPoint) {
     app.text = point.text;
-    app.cursor_position = point.cursor_position;
+    app.cursor = point.cursor;
 }
 
 fn push(app: &mut App) {
     if app.undo.history.len() > 1
-        && app.undo.history.last().unwrap().cursor_position.y == app.cursor_position.y
-        && (app.undo.history.last().unwrap().cursor_position.x - app.cursor_position.x).abs() == 1
+        && app.undo.history.last().unwrap().cursor.position.y == app.cursor.position.y
+        && (app.undo.history.last().unwrap().cursor.position.x - app.cursor.position.x).abs() == 1
     {
         let undo = create_undo_from_current(app);
         let last = app.undo.history.last_mut().unwrap();
@@ -72,45 +70,58 @@ fn push(app: &mut App) {
         app.undo.history.push(create_undo_from_current(app));
     }
     app.undo.index = app.undo.history.len();
+    app.selection = None;
 }
 
 fn undo_init(app: &mut App) {
     app.undo.history.truncate(app.undo.index);
     if app.undo.history.len() == 1 {
         let point = app.undo.history.last_mut().unwrap();
-        point.cursor_position = app.cursor_position;
+        point.cursor = app.cursor;
     }
 }
 
-pub fn delete_text(app: &mut App, range: &Range) {
+pub fn delete_text(app: &mut App, range: std::ops::Range<usize>) {
     undo_init(app);
-    let start_idx = app.text.line_to_char(range.start_line) + range.start_column;
-    let end_idx = app.text.line_to_char(range.end_line) + range.end_column;
+    app.text.remove(range.clone());
 
-    app.text.remove(start_idx..end_idx);
+    app.cursor.position = Point::from_char(range.start.clone(), &app.text);
+    app.cursor.remembered_x = app.cursor.position.x;
 
-    app.cursor_position.x = range.start_column as i64;
-    app.cursor_position.y = range.start_line as i64;
-    app.cursor_position.remembered_x = app.cursor_position.x;
     push(app);
 }
 
 pub fn insert_text(app: &mut App, text: &str) {
     undo_init(app);
+
     let start_idx =
-        app.text.line_to_char(app.cursor_position.y as usize) + app.cursor_position.x as usize;
+        app.cursor.position.to_char(&app.text);
 
     app.text.insert(start_idx, text);
-
     let end_idx = start_idx + text.chars().count();
+
+    app.cursor.position = Point::from_char(end_idx, &app.text);
+    app.cursor.remembered_x = app.cursor.position.x;
+
+    push(app);
+}
+
+pub fn replace_text(app: &mut App, range: &Range, text: &str) {
+    let start_idx = app.text.line_to_char(range.start_line) + range.start_column;
+    let mut end_idx = app.text.line_to_char(range.end_line) + range.end_column;
+
+    app.text.remove(start_idx..end_idx);
+    app.text.insert(start_idx, text);
+
+    end_idx = start_idx + text.chars().count();
 
     let end_line = app.text.char_to_line(end_idx);
 
     let end_column = end_idx - app.text.line_to_char(end_line);
-    app.cursor_position.x = end_column as i64;
-    app.cursor_position.y = end_line as i64;
-    app.cursor_position.remembered_x = app.cursor_position.x;
-    push(app);
+    app.cursor.position.x = end_column as i64;
+    app.cursor.position.y = end_line as i64;
+    app.cursor.remembered_x = app.cursor.position.x;
+
 }
 
 pub fn back(app: &mut App) {
