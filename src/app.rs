@@ -2,7 +2,6 @@ extern crate gl;
 extern crate glfw;
 
 use crate::font;
-use crate::gl_buffer;
 use crate::matrix;
 use crate::rect;
 use crate::undo;
@@ -18,7 +17,6 @@ pub struct App {
     pub projection: matrix::Matrix,
     pub cursor: Cursor,
     pub scroll: (i64, i64),
-    pub quad_index_buffer: gl_buffer::QuadIndexBuffer,
     pub should_rerender: bool,
     pub window: glfw::Window,
     pub text: ropey::Rope,
@@ -59,7 +57,6 @@ impl App {
             cursor: Cursor::new(),
             scroll: (0, 0),
             projection: projection_from_size(width, height),
-            quad_index_buffer: gl_buffer::QuadIndexBuffer::new(1000),
             undo: undo::UndoState::new(text.clone()),
             text: text,
             selection: None,

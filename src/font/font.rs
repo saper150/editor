@@ -2,7 +2,6 @@ extern crate freetype as ft;
 
 use crate::check_error;
 
-
 #[derive(Debug, Clone, Copy)]
 struct Coroners {
     bottom_right: (f32, f32),
@@ -16,32 +15,28 @@ pub struct AtlasGlyph {
     size: [f32; 2],
     bearing: [f32; 2],
     pub advance_width: f32,
-    uv: Coroners,
+    uv_pos: [f32; 2],
+    uv_dimensions: [f32; 2],
+}
+
+#[repr(C)]
+pub struct GlyphInstance {
+    pos: [f32; 2],
+    dimensions: [f32; 2],
+    uv_pos: [f32; 2],
+    uv_dimensions: [f32; 2],
+    color: [f32; 3],
 }
 
 impl AtlasGlyph {
-    pub fn quad(&self, xpos: f32, ypos: f32) -> [[f32; 4]; 4] {
-        let x = xpos + self.bearing[0];
-        let y = ypos - self.bearing[1];
-
-        let bottom_left = [x, y, self.uv.bottom_left.0, self.uv.bottom_left.1];
-
-        let top_left = [x, y + self.size[1], self.uv.top_left.0, self.uv.top_left.1];
-
-        let top_right = [
-            x + self.size[0],
-            y + self.size[1],
-            self.uv.top_right.0,
-            self.uv.top_right.1,
-        ];
-        let bottom_right = [
-            x + self.size[0],
-            y,
-            self.uv.bottom_right.0,
-            self.uv.bottom_right.1,
-        ];
-
-        [bottom_left, top_left, top_right, bottom_right]
+    pub fn instance(&self, xpos: f32, ypos: f32, color: [f32; 3]) -> GlyphInstance {
+        GlyphInstance {
+            pos: [xpos + self.bearing[0], ypos - self.bearing[1]],
+            color: color,
+            dimensions: self.size,
+            uv_dimensions: self.uv_dimensions,
+            uv_pos: self.uv_pos,
+        }
     }
 }
 
@@ -65,11 +60,12 @@ impl FontAtlas {
         let texture = generate_texture(cache_width, cache_height);
 
         let library = ft::Library::init().unwrap();
-        library.set_lcd_filter(ft::LcdFilter::LcdFilterDefault).unwrap();
+        library
+            .set_lcd_filter(ft::LcdFilter::LcdFilterDefault)
+            .unwrap();
         let face = library.new_face("./assets/hack.ttf", 0).unwrap();
 
         face.set_pixel_sizes(0, scale).unwrap();
-
 
         FontAtlas {
             texture: texture,
@@ -86,14 +82,13 @@ impl FontAtlas {
         let g = self.glyphs.get(&char);
 
         match g {
-            Some(g) => { g.clone() }
+            Some(g) => g.clone(),
             None => {
                 let glyph = self.load_char(char);
                 self.glyphs.insert(char, glyph.clone());
                 glyph
             }
         }
-
     }
 
     fn load_char(&mut self, char: char) -> AtlasGlyph {
@@ -102,7 +97,7 @@ impl FontAtlas {
             .unwrap();
 
         self.face.glyph().render_glyph(ft::RenderMode::Lcd).unwrap();
-        let uv = self.load_bitmap_to_texture(&self.face.glyph().bitmap());
+        let (uv_pos, uv_dimensions) = self.load_bitmap_to_texture(&self.face.glyph().bitmap());
 
         return AtlasGlyph {
             size: [
@@ -114,11 +109,12 @@ impl FontAtlas {
                 self.face.glyph().bitmap_top() as f32,
             ],
             advance_width: (self.face.glyph().advance().x >> 6) as f32,
-            uv: uv,
+            uv_dimensions,
+            uv_pos,
         };
     }
 
-    fn load_bitmap_to_texture(&mut self, bitmap: &ft::Bitmap) -> Coroners {
+    fn load_bitmap_to_texture(&mut self, bitmap: &ft::Bitmap) -> ([f32; 2], [f32; 2]) {
         let mut dest: Vec<u8> = Vec::new();
         dest.reserve((bitmap.rows() * bitmap.width()) as usize);
 
@@ -157,30 +153,35 @@ impl FontAtlas {
 
         let width = bitmap.width() / 3;
 
-        let uv = Coroners {
-            top_left: (
-                self.occupied_width as f32 / self.texture_width as f32,
-                bitmap.rows() as f32 / self.texture_height as f32,
-            ),
-            top_right: (
-                (self.occupied_width + width) as f32 / self.texture_width as f32,
-                bitmap.rows() as f32 / self.texture_height as f32,
-            ),
-            bottom_left: (self.occupied_width as f32 / self.texture_width as f32, 0.0),
-            bottom_right: (
-                (self.occupied_width + width) as f32 / self.texture_width as f32,
-                0.0,
-            ),
-        };
-
+        let uv_dimensions = [
+            width as f32 / self.texture_width as f32,
+            bitmap.rows() as f32 / self.texture_height as f32,
+        ];
+        let uv_pos = [self.occupied_width as f32 / self.texture_width as f32, 0.0];
         self.occupied_width += width + 1;
+        (uv_pos, uv_dimensions)
 
-        uv
+        // let uv = Coroners {
+        //     top_left: (
+        //         self.occupied_width as f32 / self.texture_width as f32,
+        //         bitmap.rows() as f32 / self.texture_height as f32,
+        //     ),
+        //     top_right: (
+        //         (self.occupied_width + width) as f32 / self.texture_width as f32,
+        //         bitmap.rows() as f32 / self.texture_height as f32,
+        //     ),
+        //     bottom_left: (self.occupied_width as f32 / self.texture_width as f32, 0.0),
+        //     bottom_right: (
+        //         (self.occupied_width + width) as f32 / self.texture_width as f32,
+        //         0.0,
+        //     ),
+        // };
+
+        // uv
     }
 }
 
-
-fn  generate_texture(width: i32, height: i32) -> gl::types::GLuint {
+fn generate_texture(width: i32, height: i32) -> gl::types::GLuint {
     let mut texture: gl::types::GLuint = 0;
 
     unsafe {

@@ -7,7 +7,6 @@ mod app;
 mod check_error;
 mod cursor;
 mod font;
-mod gl_buffer;
 mod matrix;
 mod process_keyboard;
 mod rect;
@@ -21,38 +20,38 @@ use rect::rect_renderer::create_rect;
 
 use cursor::Point;
 
-use syntect::easy::HighlightLines;
-use syntect::highlighting::{HighlightIterator, HighlightState, Highlighter, Style, ThemeSet};
-use syntect::parsing::{ScopeStack, SyntaxSet, SyntaxSetBuilder, SyntaxDefinition};
-use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
+// use syntect::easy::HighlightLines;
+// use syntect::highlighting::{HighlightIterator, HighlightState, Highlighter, Style, ThemeSet};
+// use syntect::parsing::{ScopeStack, SyntaxSet, SyntaxSetBuilder, SyntaxDefinition};
+// use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
 
-fn f() {
-    let ps = SyntaxSet::load_defaults_newlines();
+// fn f() {
+//     let ps = SyntaxSet::load_defaults_newlines();
 
-    let ts = ThemeSet::load_defaults();
-    let syntax = ps.find_syntax_by_extension("html").unwrap();
+//     let ts = ThemeSet::load_defaults();
+//     let syntax = ps.find_syntax_by_extension("html").unwrap();
 
     
-    let mut ee = syntect::parsing::ParseState::new(syntax);
-    let s = "<div>abcabcab</div>";
+//     let mut ee = syntect::parsing::ParseState::new(syntax);
+//     let s = "<div>abcabcab</div>";
 
-    let highlighter = Highlighter::new(&ts.themes["base16-ocean.dark"]);
-    let mut highlight_state = HighlightState::new(&highlighter, ScopeStack::new());
+//     let highlighter = Highlighter::new(&ts.themes["base16-ocean.dark"]);
+//     let mut highlight_state = HighlightState::new(&highlighter, ScopeStack::new());
 
-    let ops = ee.parse_line(s, &ps);
-    let mut iter = HighlightIterator::new(&mut highlight_state, &ops[..], s, &highlighter);
+//     let ops = ee.parse_line(s, &ps);
+//     let mut iter = HighlightIterator::new(&mut highlight_state, &ops[..], s, &highlighter);
 
-    // let e = syntect::highlighting::Highlighter::new(&ts.themes["base16-ocean.dark"]);
+//     // let e = syntect::highlighting::Highlighter::new(&ts.themes["base16-ocean.dark"]);
 
-    // let mut h = HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
+//     // let mut h = HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
 
-    // for line in LinesWithEndings::from(s) {
-    //     let ranges: Vec<(Style, &str)> = h.highlight(line, &ps);
+//     // for line in LinesWithEndings::from(s) {
+//     //     let ranges: Vec<(Style, &str)> = h.highlight(line, &ps);
 
-    //     let escaped = as_24_bit_terminal_escaped(&ranges[..], true);
-    //     println!("{}", escaped);
-    // }
-}
+//     //     let escaped = as_24_bit_terminal_escaped(&ranges[..], true);
+//     //     println!("{}", escaped);
+//     // }
+// }
 
 fn process_event(app: &mut App, event: &glfw::WindowEvent) {
     match event {
@@ -175,8 +174,6 @@ fn render_app(app: &mut App) {
 
         let visible_range = app::visible_range(app);
 
-        println!("{:?}", app::visible_range(app));
-
         let screen_scroll = app.scroll.1 as f32 * app.font_renderer.advance_height;
 
         let p = matrix::mul(&app.projection, &matrix::translate(0.0, screen_scroll, 0.0));
@@ -186,7 +183,7 @@ fn render_app(app: &mut App) {
         let height = app.font_renderer.advance_height;
 
         app.font_renderer
-            .render(&app.text, visible_range, &p, &mut app.quad_index_buffer);
+            .render(&app.text, visible_range, &p);
 
         let width = 2.0;
 

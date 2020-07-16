@@ -5,8 +5,7 @@ use crate::shaders;
 use std::ffi::CString;
 
 use crate::check_error;
-use crate::font::font::FontAtlas;
-use crate::gl_buffer::QuadIndexBuffer;
+use crate::font::font::{FontAtlas, GlyphInstance};
 use crate::matrix;
 
 pub struct FontRenderer {
@@ -20,6 +19,7 @@ pub struct FontRenderer {
     quad_buffer_object: gl::types::GLuint,
     quad_buffer_size: usize,
     transform_loc: gl::types::GLint,
+    index_buffer: gl::types::GLuint,
 }
 
 fn create_shader_program() -> shaders::Program {
@@ -32,6 +32,67 @@ fn create_shader_program() -> shaders::Program {
             .unwrap();
 
     shaders::Program::from_shaders(&[vert_shader, frag_shader]).unwrap()
+}
+
+fn vao_setup() {
+    unsafe {
+        gl::EnableVertexAttribArray(0);
+        gl::VertexAttribPointer(
+            0,
+            2,
+            gl::FLOAT,
+            gl::FALSE,
+            std::mem::size_of::<GlyphInstance>() as gl::types::GLint,
+            std::ptr::null(),
+        );
+        gl::VertexAttribDivisor(0, 1);
+        check_error!();
+
+        gl::EnableVertexAttribArray(1);
+
+        gl::VertexAttribPointer(
+            1,
+            2,
+            gl::FLOAT,
+            gl::FALSE,
+            std::mem::size_of::<GlyphInstance>() as gl::types::GLint,
+            (2 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
+        );
+        gl::VertexAttribDivisor(1, 1);
+
+        gl::EnableVertexAttribArray(2);
+        gl::VertexAttribPointer(
+            2,
+            2,
+            gl::FLOAT,
+            gl::FALSE,
+            std::mem::size_of::<GlyphInstance>() as gl::types::GLint,
+            (4 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
+        );
+        gl::VertexAttribDivisor(2, 1);
+
+        gl::EnableVertexAttribArray(3);
+        gl::VertexAttribPointer(
+            3,
+            2,
+            gl::FLOAT,
+            gl::FALSE,
+            std::mem::size_of::<GlyphInstance>() as gl::types::GLint,
+            (6 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
+        );
+        gl::VertexAttribDivisor(3, 1);
+
+        gl::EnableVertexAttribArray(4);
+        gl::VertexAttribPointer(
+            4,
+            3,
+            gl::FLOAT,
+            gl::FALSE,
+            std::mem::size_of::<GlyphInstance>() as gl::types::GLint,
+            (8 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
+        );
+        gl::VertexAttribDivisor(4, 1);
+    }
 }
 
 impl FontRenderer {
@@ -49,17 +110,22 @@ impl FontRenderer {
         unsafe {
             gl::BindVertexArray(vao);
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            gl::EnableVertexAttribArray(0);
-            gl::VertexAttribPointer(
-                0,
-                4,
-                gl::FLOAT,
-                gl::FALSE,
-                (4 * std::mem::size_of::<f32>()) as gl::types::GLint,
-                std::ptr::null(),
+            vao_setup();
+        }
+
+        let mut index_buffer: gl::types::GLuint = 0;
+        unsafe {
+            gl::GenBuffers(1, &mut index_buffer);
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, index_buffer);
+
+            let indices = [0, 1, 2, 0, 2, 3];
+
+            gl::BufferData(
+                gl::ELEMENT_ARRAY_BUFFER,
+                std::mem::size_of_val(&indices) as gl::types::GLsizeiptr,
+                indices.as_ptr() as *const gl::types::GLvoid,
+                gl::STATIC_DRAW,
             );
-            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-            gl::BindVertexArray(0);
         }
 
         let shader_program = create_shader_program();
@@ -71,7 +137,7 @@ impl FontRenderer {
             );
 
             if transform_loc == -1 {
-                panic!("location not found")
+                panic!("location not found");
             }
         }
 
@@ -92,6 +158,7 @@ impl FontRenderer {
             quad_buffer_size: 0,
             font_atlas: atlas,
             transform_loc: transform_loc,
+            index_buffer,
         }
     }
 
@@ -106,19 +173,19 @@ impl FontRenderer {
         }
     }
 
-    fn fill_quads(&mut self, text: &ropey::Rope, range: std::ops::Range<usize>) -> usize {
+    fn fill_buffer(&mut self, text: &ropey::Rope, range: std::ops::Range<usize>) -> usize {
         unsafe {
             gl::BindBuffer(gl::ARRAY_BUFFER, self.quad_buffer_object);
         }
 
         let lines = text.lines_at(range.start).take(range.end - range.start);
 
-        let car_count = lines.clone().map(|x| { x.len_chars() }).sum();
+        let car_count = lines.clone().map(|x| x.len_chars()).sum();
         if self.quad_buffer_size < car_count {
             unsafe {
                 gl::BufferData(
                     gl::ARRAY_BUFFER,
-                    (car_count * 2 * std::mem::size_of::<[[f32; 4]; 4]>()) as gl::types::GLsizeiptr,
+                    (car_count * 2 * std::mem::size_of::<GlyphInstance>()) as gl::types::GLsizeiptr,
                     std::ptr::null(),
                     gl::DYNAMIC_DRAW,
                 );
@@ -134,7 +201,7 @@ impl FontRenderer {
         let mut i: usize = 0;
         let b;
         unsafe {
-            b = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY) as *mut [[f32; 4]; 4];
+            b = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY) as *mut GlyphInstance;
         }
 
         for line in lines {
@@ -147,7 +214,11 @@ impl FontRenderer {
                 } else {
                     let g = self.font_atlas.get_glyph(char);
                     unsafe {
-                        *b.offset(i as isize) = g.quad(xpos + advance, ypos + line_offset);
+                        *b.offset(i as isize) = g.instance(
+                            xpos + advance,
+                            ypos + line_offset,
+                            [213.0 / 255.0, 213.0 / 255.0, 213.0 / 255.0],
+                        );
                     }
                     i += 1;
                     advance += g.advance_width;
@@ -166,29 +237,25 @@ impl FontRenderer {
         text: &ropey::Rope,
         range: std::ops::Range<usize>,
         projection: &matrix::Matrix,
-        index_buffer: &mut QuadIndexBuffer,
     ) {
         self.program.set_used();
         self.set_projection(projection);
 
-        let size = self.fill_quads(text, range);
-        index_buffer.ensure_size(size as u32);
+        let size = self.fill_buffer(text, range);
 
         unsafe {
             gl::BindVertexArray(self.vao);
             gl::BlendFunc(gl::SRC1_COLOR, gl::ONE_MINUS_SRC1_COLOR);
-
             gl::BindTexture(gl::TEXTURE_2D, self.font_atlas.texture);
 
-            index_buffer.bind();
-
-            gl::DrawElements(
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.index_buffer);
+            gl::DrawElementsInstanced(
                 gl::TRIANGLES,
-                (size * 6) as i32,
+                6,
                 gl::UNSIGNED_INT,
                 std::ptr::null(),
+                size as i32,
             );
-            index_buffer.unbind();
         }
 
         check_error!();

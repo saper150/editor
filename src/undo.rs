@@ -27,25 +27,6 @@ impl UndoState {
     }
 }
 
-pub struct Range {
-    start_line: usize,
-    start_column: usize,
-    end_line: usize,
-    end_column: usize,
-}
-
-impl Range {
-    pub fn new(start: (usize, usize), end: (usize, usize)) -> Range {
-        Range {
-            start_line: start.0,
-            start_column: start.1,
-
-            end_line: end.0,
-            end_column: end.1,
-        }
-    }
-}
-
 fn create_undo_from_current(app: &App) -> UndoPoint {
     UndoPoint {
         text: app.text.clone(),
@@ -106,23 +87,23 @@ pub fn insert_text(app: &mut App, text: &str) {
     push(app);
 }
 
-pub fn replace_text(app: &mut App, range: &Range, text: &str) {
-    let start_idx = app.text.line_to_char(range.start_line) + range.start_column;
-    let mut end_idx = app.text.line_to_char(range.end_line) + range.end_column;
+// pub fn replace_text(app: &mut App, range: &Range, text: &str) {
+//     let start_idx = app.text.line_to_char(range.start_line) + range.start_column;
+//     let mut end_idx = app.text.line_to_char(range.end_line) + range.end_column;
 
-    app.text.remove(start_idx..end_idx);
-    app.text.insert(start_idx, text);
+//     app.text.remove(start_idx..end_idx);
+//     app.text.insert(start_idx, text);
 
-    end_idx = start_idx + text.chars().count();
+//     end_idx = start_idx + text.chars().count();
 
-    let end_line = app.text.char_to_line(end_idx);
+//     let end_line = app.text.char_to_line(end_idx);
 
-    let end_column = end_idx - app.text.line_to_char(end_line);
-    app.cursor.position.x = end_column as i64;
-    app.cursor.position.y = end_line as i64;
-    app.cursor.remembered_x = app.cursor.position.x;
+//     let end_column = end_idx - app.text.line_to_char(end_line);
+//     app.cursor.position.x = end_column as i64;
+//     app.cursor.position.y = end_line as i64;
+//     app.cursor.remembered_x = app.cursor.position.x;
 
-}
+// }
 
 pub fn back(app: &mut App) {
     if app.undo.index <= 1 {

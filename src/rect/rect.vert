@@ -10,14 +10,12 @@ uniform mat4 projection;
 void main()
 {
 
-    vec2 position;
+    vec2 v = vec2(
+        (gl_VertexID == 0 || gl_VertexID == 1) ? 0. : 1.,
+        (gl_VertexID == 1 || gl_VertexID == 2) ? 0. : 1.
+    );
 
-    position.x = (gl_VertexID == 0 || gl_VertexID == 1) ? 0. : 1.;
-    position.y = (gl_VertexID == 1 || gl_VertexID == 2) ? 0. : 1.;
-
-    position.x = pos.x + dim.x * position.x;
-    position.y = pos.y + dim.y * position.y;
-
+    vec2 position = pos + dim * v;
 
     gl_Position = projection * vec4(position.xy, 0.0, 1.0);
     vertexColor = vec4(color.xyz, 1.0);
