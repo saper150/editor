@@ -230,20 +230,10 @@ pub fn process_keyboard(
         Key::Up => {
             process_selection(app, modifiers);
             move_cursor_y(app, app.cursor.position.y - 1);
-            if (app.cursor.position.y) < app.scroll.1 {
-                app.scroll.1 -= 1;
-            }
         }
         Key::Down => {
             process_selection(app, modifiers);
             move_cursor_y(app, app.cursor.position.y + 1);
-            // let (_, y_height) = app.window.get_framebuffer_size();
-
-            // if (app.cursor_position.y as f32 * app.font_renderer.advance_height)
-            //     > app.scroll.1 + (y_height as f32 - app.font_renderer.advance_height)
-            // {
-            //     app.scroll.1 += app.font_renderer.advance_height as f32;
-            // }
         }
         Key::End => {
             process_selection(app, modifiers);
