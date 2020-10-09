@@ -1,29 +1,36 @@
 use crate::app;
-use crate::undo;
 use crate::cursor;
+use crate::text;
 
 use app::App;
 use cursor::Point;
 
 use glfw::Key;
-
+use std::fs;
 
 const PAGE_SIZE: i64 = 20;
 
 fn is_last_line(app: &App) -> bool {
-    return app.text.len_lines() as i64 == app.cursor.position.y + 1;
+    return app.text.text.len_lines() as i64 == app.cursor.position.y + 1;
 }
 
 fn move_to_last_char(app: &mut App) {
     if is_last_line(app) {
         move_cursor_x(
             app,
-            app.text.line(app.cursor.position.y as usize).len_chars() as i64,
+            app.text
+                .text
+                .line(app.cursor.position.y as usize)
+                .len_chars() as i64,
         );
     } else {
         move_cursor_x(
             app,
-            app.text.line(app.cursor.position.y as usize).len_chars() as i64 - 1,
+            app.text
+                .text
+                .line(app.cursor.position.y as usize)
+                .len_chars() as i64
+                - 1,
         );
     }
 }
@@ -32,15 +39,27 @@ fn move_cursor_x(app: &mut App, x: i64) {
     if x < 0 {
         if app.cursor.position.y != 0 {
             move_cursor_y(app, app.cursor.position.y - 1);
-            app.cursor.position.x =
-                app.text.line(app.cursor.position.y as usize).len_chars() as i64;
+            app.cursor.position.x = app
+                .text
+                .text
+                .line(app.cursor.position.y as usize)
+                .len_chars() as i64;
         } else {
             app.cursor.position.x = 0;
         }
-    } else if x >= app.text.line(app.cursor.position.y as usize).len_chars() as i64 {
+    } else if x
+        >= app
+            .text
+            .text
+            .line(app.cursor.position.y as usize)
+            .len_chars() as i64
+    {
         if is_last_line(app) {
-            app.cursor.position.x =
-                app.text.line(app.cursor.position.y as usize).len_chars() as i64;
+            app.cursor.position.x = app
+                .text
+                .text
+                .line(app.cursor.position.y as usize)
+                .len_chars() as i64;
         } else {
             move_cursor_y(app, app.cursor.position.y + 1);
             app.cursor.position.x = 0;
@@ -51,21 +70,20 @@ fn move_cursor_x(app: &mut App, x: i64) {
     app.cursor.remembered_x = app.cursor.position.x;
 }
 
-
 fn move_cursor_y(app: &mut App, y: i64) {
     let cursor = &mut app.cursor;
 
-    cursor.position.y = y.max(0).min(app.text.len_lines() as i64 - 1);
+    cursor.position.y = y.max(0).min(app.text.text.len_lines() as i64 - 1);
 
-    if app.text.line(cursor.position.y as usize).len_chars() == 0 {
+    if app.text.text.line(cursor.position.y as usize).len_chars() == 0 {
         cursor.position.x = 0
     } else {
         cursor.position.x = cursor
             .remembered_x
             .max(0)
-            .min(app.text.line(cursor.position.y as usize).len_chars() as i64 - 1);
+            .min(app.text.text.line(cursor.position.y as usize).len_chars() as i64 - 1);
 
-        if cursor.position.y as usize + 1 == app.text.len_lines() {
+        if cursor.position.y as usize + 1 == app.text.text.len_lines() {
             cursor.position.x += 1;
         }
     }
@@ -73,18 +91,17 @@ fn move_cursor_y(app: &mut App, y: i64) {
 
 fn process_selection(app: &mut App, modifiers: &glfw::Modifiers) {
     if modifiers.contains(glfw::Modifiers::Shift) {
-        if app.selection.is_none() {
-            app.selection = Some(app.cursor.position.clone());
+        if app.cursor.selection.is_none() {
+            app.cursor.selection = Some(app.cursor.position.clone());
         }
     } else {
-        app.selection = None;
+        app.cursor.selection = None;
     }
 }
 
-
 fn selection_range(app: &App) -> std::ops::Range<usize> {
-    let a = app.cursor.position.to_char(&app.text);
-    let b = app.selection.unwrap().to_char(&app.text);
+    let a = app.cursor.position.to_char(&app.text.text);
+    let b = app.cursor.selection.unwrap().to_char(&app.text.text);
     a.min(b)..b.max(a)
 }
 
@@ -136,7 +153,7 @@ where
 
 pub fn process_char(app: &mut App, char: &char) {
     let mut tmp = [0; 4];
-    undo::insert_text(app, char.encode_utf8(&mut tmp));
+    text::insert_text(&mut app.text, &mut app.cursor, char.encode_utf8(&mut tmp));
     app.should_rerender = true;
 }
 
@@ -156,10 +173,13 @@ pub fn process_keyboard(
     if modifiers.contains(glfw::Modifiers::Control) {
         match key {
             Key::Z => {
-                undo::back(app);
+                text::undo(&mut app.text, &mut app.cursor);
             }
             Key::Y => {
-                undo::forward(app);
+                text::redo(&mut app.text, &mut app.cursor);
+            }
+            Key::S => {
+                fs::write(&app.file_path, &app.text.text.to_string()).unwrap();
             }
             _ => {}
         }
@@ -167,47 +187,30 @@ pub fn process_keyboard(
 
     match key {
         Key::Enter => {
-            undo::insert_text(app, "\n");
+            text::insert_text(&mut app.text, &mut app.cursor, "\n");
         }
         Key::Tab => {
-            undo::insert_text(app, "\t");
+            text::insert_text(&mut app.text, &mut app.cursor, "\t");
         }
         Key::Backspace => {
-
-            if app.selection.is_some() {
-                undo::delete_text(app, selection_range(app));
-            } else {
-                let char_idx = app.cursor.position.to_char(&app.text);
-                if char_idx > 0 {
-                    undo::delete_text(app, char_idx - 1..char_idx);
-                }
-            }
-
+            text::delete_text(&mut app.text, &mut app.cursor, text::DeleteKey::Backspace);
         }
         Key::Delete => {
-            if app.selection.is_some() {
-                undo::delete_text(app, selection_range(app));
-            } else {
-                let char_idx = app.cursor.position.to_char(&app.text);
-                if char_idx + 1 < app.text.len_chars() {
-                    undo::delete_text(app, char_idx..char_idx + 1);
-                }
-            }
+            text::delete_text(&mut app.text, &mut app.cursor, text::DeleteKey::Del);
         }
         Key::Left => {
             process_selection(app, modifiers);
 
             if modifiers.contains(glfw::Modifiers::Control) {
-                let char_idx = app.cursor.position.to_char(&app.text);
+                let char_idx = app.cursor.position.to_char(&app.text.text);
 
                 let next_char_idx = char_idx
                     - next_word(&mut BackwardIterator {
-                        src: &mut app.text.chars_at(char_idx),
+                        src: &mut app.text.text.chars_at(char_idx),
                     });
 
-                app.cursor.position = Point::from_char(next_char_idx, &app.text);
+                app.cursor.position = Point::from_char(next_char_idx, &app.text.text);
                 app.cursor.remembered_x = app.cursor.position.x;
-
             } else {
                 move_cursor_x(app, app.cursor.position.x - 1);
             }
@@ -216,11 +219,11 @@ pub fn process_keyboard(
             process_selection(app, modifiers);
 
             if modifiers.contains(glfw::Modifiers::Control) {
-                let char_idx = app.cursor.position.to_char(&app.text);
+                let char_idx = app.cursor.position.to_char(&app.text.text);
 
-                let next_char_idx = char_idx + next_word(&mut app.text.chars_at(char_idx));
+                let next_char_idx = char_idx + next_word(&mut app.text.text.chars_at(char_idx));
 
-                app.cursor.position = Point::from_char(next_char_idx, &app.text);
+                app.cursor.position = Point::from_char(next_char_idx, &app.text.text);
 
                 app.cursor.remembered_x = app.cursor.position.x;
             } else {
@@ -246,12 +249,20 @@ pub fn process_keyboard(
         Key::PageDown => {
             process_selection(app, modifiers);
             move_cursor_y(app, app.cursor.position.y + PAGE_SIZE);
-            app.scroll.1 = clamp(app.scroll.1 + PAGE_SIZE, 0, app.text.len_lines() as i64 - 10);
+            app.scroll.1 = clamp(
+                app.scroll.1 + PAGE_SIZE,
+                0,
+                app.text.text.len_lines() as i64 - 10,
+            );
         }
         Key::PageUp => {
             process_selection(app, modifiers);
             move_cursor_y(app, app.cursor.position.y - PAGE_SIZE);
-            app.scroll.1 = clamp(app.scroll.1 - PAGE_SIZE, 0, app.text.len_lines() as i64 - 10);
+            app.scroll.1 = clamp(
+                app.scroll.1 - PAGE_SIZE,
+                0,
+                app.text.text.len_lines() as i64 - 10,
+            );
         }
         _ => {}
     }

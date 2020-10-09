@@ -1,2 +1,2 @@
-pub mod font_renderer;
 pub mod font;
+pub mod font_renderer;

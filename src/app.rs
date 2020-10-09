@@ -1,17 +1,20 @@
 extern crate gl;
 extern crate glfw;
 
+use crate::cursor;
 use crate::font;
 use crate::matrix;
 use crate::rect;
-use crate::undo;
-use crate::cursor;
+use crate::text;
 
+use cursor::Cursor;
 use font::font_renderer::FontRenderer;
 use rect::rect_renderer::RectRenderer;
-use cursor::{Cursor, Point};
+
+use std::fs::File;
 
 pub struct App {
+    pub file_path: String,
     pub font_renderer: FontRenderer,
     pub rect_renderer: RectRenderer,
     pub projection: matrix::Matrix,
@@ -19,9 +22,7 @@ pub struct App {
     pub scroll: (i64, i64),
     pub should_rerender: bool,
     pub window: glfw::Window,
-    pub text: ropey::Rope,
-    pub undo: undo::UndoState,
-    pub selection: Option<Point>
+    pub text: text::Text,
 }
 
 pub fn projection_from_size(width: i32, height: i32) -> matrix::Matrix {
@@ -39,17 +40,20 @@ pub fn visible_range(app: &App) -> std::ops::Range<usize> {
     let (_, y_size) = app.window.get_framebuffer_size();
     let (_, scroll_y) = app.scroll;
 
-    scroll_y as usize..scroll_y as usize + ((y_size as f32) / app.font_renderer.advance_height).ceil() as usize
+    scroll_y as usize
+        ..scroll_y as usize + ((y_size as f32) / app.font_renderer.advance_height).ceil() as usize
 }
 
 impl App {
-    pub fn new(window: glfw::Window, width: i32, height: i32) -> App {
-        let t = include_str!("text.txt");
-        let text = ropey::Rope::from_str(t);
+    pub fn new(window: glfw::Window, width: i32, height: i32, file_path: &str) -> App {
+        let text = text::Text::new(File::open(file_path).unwrap());
+
         unsafe {
             gl::Viewport(0, 0, width, height);
         }
+
         return App {
+            file_path: file_path.into(),
             font_renderer: FontRenderer::new(),
             rect_renderer: RectRenderer::new(),
             should_rerender: true,
@@ -57,10 +61,7 @@ impl App {
             cursor: Cursor::new(),
             scroll: (0, 0),
             projection: projection_from_size(width, height),
-            undo: undo::UndoState::new(text.clone()),
             text: text,
-            selection: None,
         };
     }
 }
-

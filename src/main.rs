@@ -11,44 +11,12 @@ mod highlight;
 mod matrix;
 mod process_keyboard;
 mod rect;
-mod shaders;
-mod timer;
-mod undo;
 mod render;
+mod shaders;
+mod text;
+mod timer;
 
 use app::{projection_from_size, App};
-
-// use syntect::easy::HighlightLines;
-// use syntect::highlighting::{HighlightIterator, HighlightState, Highlighter, Style, ThemeSet};
-// use syntect::parsing::{ScopeStack, SyntaxSet, SyntaxSetBuilder, SyntaxDefinition};
-// use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
-
-// fn f() {
-//     let ps = SyntaxSet::load_defaults_newlines();
-
-//     let ts = ThemeSet::load_defaults();
-//     let syntax = ps.find_syntax_by_extension("html").unwrap();
-
-//     let mut ee = syntect::parsing::ParseState::new(syntax);
-//     let s = "<div>abcabcab</div>";
-
-//     let highlighter = Highlighter::new(&ts.themes["base16-ocean.dark"]);
-//     let mut highlight_state = HighlightState::new(&highlighter, ScopeStack::new());
-
-//     let ops = ee.parse_line(s, &ps);
-//     let mut iter = HighlightIterator::new(&mut highlight_state, &ops[..], s, &highlighter);
-
-//     // let e = syntect::highlighting::Highlighter::new(&ts.themes["base16-ocean.dark"]);
-
-//     // let mut h = HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
-
-//     // for line in LinesWithEndings::from(s) {
-//     //     let ranges: Vec<(Style, &str)> = h.highlight(line, &ps);
-
-//     //     let escaped = as_24_bit_terminal_escaped(&ranges[..], true);
-//     //     println!("{}", escaped);
-//     // }
-// }
 
 fn process_event(app: &mut App, event: &glfw::WindowEvent) {
     match event {
@@ -72,6 +40,7 @@ fn process_event(app: &mut App, event: &glfw::WindowEvent) {
     }
 }
 
+use std::env;
 
 fn main() {
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
@@ -101,7 +70,13 @@ fn main() {
         gl::Enable(gl::MULTISAMPLE);
     }
 
-    let mut app = App::new(window, 800, 600);
+    let file_path = if env::args().count() > 1 {
+        env::args().last().unwrap()
+    } else {
+        "./text.txt".into()
+    };
+
+    let mut app = App::new(window, 800, 600, &file_path);
 
     while !app.window.should_close() {
         glfw.wait_events();
@@ -111,5 +86,6 @@ fn main() {
         }
         render::render_app(&mut app);
     }
+
     return;
 }

@@ -208,6 +208,9 @@ impl FontRenderer {
             line_offset += self.font_atlas.advance_height;
             let mut advance: f32 = 0.0;
             for char in line.chars() {
+                if char == '\n' {
+                    continue;
+                }
                 if char == '\t' {
                     let g = self.font_atlas.get_glyph(' ');
                     advance += g.advance_width * 4.0;

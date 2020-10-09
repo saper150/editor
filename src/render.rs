@@ -1,12 +1,12 @@
 use crate::app;
-use crate::rect::rect_renderer::create_rect;
-use crate::matrix;
 use crate::cursor::Point;
+use crate::matrix;
+use crate::rect::rect_renderer::create_rect;
 
 use crate::glfw::Context;
 
-use matrix::Matrix;
 use app::App;
+use matrix::Matrix;
 
 fn x_to_screen(app: &App, x: i64) -> f32 {
     let char_width = app.font_renderer.char_width;
@@ -22,15 +22,15 @@ fn grid_to_screen(app: &App, pos: Point) -> (f32, f32) {
     (x_to_screen(app, pos.x), y_to_screen(app, pos.y))
 }
 
-
+// @todo render only visible selection
 fn render_selection(app: &mut App, projection: &Matrix) {
     let height = app.font_renderer.advance_height;
 
-    if app.selection.is_none() {
+    if app.cursor.selection.is_none() {
         return;
     }
 
-    let selection = app.selection.unwrap();
+    let selection = app.cursor.selection.unwrap();
 
     let (start, end) = if selection.y == app.cursor.position.y {
         if selection.x >= app.cursor.position.x {
@@ -63,13 +63,14 @@ fn render_selection(app: &mut App, projection: &Matrix) {
             start_screen.1,
             x_to_screen(
                 app,
-                app.text.line(start.y as usize).len_chars() as i64 - start.x,
+                app.text.text.line(start.y as usize).len_chars() as i64 - start.x,
             ),
             height,
             [0.5, 0.5, 0.5],
         ));
 
         for (i, l) in app
+            .text
             .text
             .lines_at(start.y as usize + 1)
             .take((end.y - start.y) as usize - 1)
@@ -147,7 +148,7 @@ pub fn render_app(app: &mut App) {
         render_cursor(app, &mvp);
 
         app.font_renderer
-            .render(&app.text, app::visible_range(app), &mvp);
+            .render(&app.text.text, app::visible_range(app), &mvp);
 
         app.window.swap_buffers();
         app.should_rerender = false;

@@ -143,7 +143,6 @@ impl RectRenderer {
         self.program.set_used();
         self.set_projection(projection);
 
-
         unsafe {
             gl::BindBuffer(gl::ARRAY_BUFFER, self.instance_buffer_object);
             gl::BufferData(

@@ -63,7 +63,10 @@ impl FontAtlas {
         library
             .set_lcd_filter(ft::LcdFilter::LcdFilterDefault)
             .unwrap();
-        let face = library.new_face("./assets/hack.ttf", 0).unwrap();
+
+        let m = std::rc::Rc::new(include_bytes!("../../assets/hack.ttf").to_vec());
+
+        let face = library.new_memory_face(m, 0).unwrap();
 
         face.set_pixel_sizes(0, scale).unwrap();
 
