@@ -1,8 +1,9 @@
-use crate::shaders;
+use crate::{shaders};
 use std::ffi::CString;
 
 use crate::check_error;
 use crate::matrix;
+use crate::offset_of;
 
 #[repr(C)]
 pub struct RectInstance {
@@ -77,7 +78,7 @@ impl RectRenderer {
                 gl::FLOAT,
                 gl::FALSE,
                 std::mem::size_of::<RectInstance>() as gl::types::GLint,
-                std::ptr::null(),
+                offset_of!(RectInstance, pos) as *const gl::types::GLvoid,
             );
             gl::VertexAttribDivisor(0, 1);
             check_error!();
@@ -90,7 +91,7 @@ impl RectRenderer {
                 gl::FLOAT,
                 gl::FALSE,
                 std::mem::size_of::<RectInstance>() as gl::types::GLint,
-                (2 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
+                offset_of!(RectInstance, dimensions) as *const gl::types::GLvoid,
             );
 
             gl::VertexAttribDivisor(1, 1);
@@ -101,7 +102,7 @@ impl RectRenderer {
                 gl::FLOAT,
                 gl::FALSE,
                 std::mem::size_of::<RectInstance>() as gl::types::GLint,
-                (4 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
+                offset_of!(RectInstance, color) as *const gl::types::GLvoid,
             );
             gl::VertexAttribDivisor(2, 1);
         }

@@ -15,93 +15,68 @@ pub struct UndoState {
 }
 
 pub struct Text {
-    pub text: ropey::Rope,
     pub history: Vec<UndoPoint>,
     pub index: usize,
+    pub last_added: bool,
 }
 
-impl Text {
-    pub fn new<T: std::io::Read>(reader: T) -> Text {
-        let initial_text = ropey::Rope::from_reader(reader).unwrap();
-        return Text {
-            text: initial_text.clone(),
-            history: vec![UndoPoint {
-                text: initial_text,
-                cursor: Cursor::new(),
-            }],
-            index: 0,
-        };
-    }
-}
-
-fn selection_range(text: &Text, cursor: &Cursor) -> std::ops::Range<usize> {
-    let a = cursor.position.to_char(&text.text);
-    let b = cursor.selection.unwrap().to_char(&text.text);
+fn selection_range(text: &ropey::Rope, cursor: &Cursor) -> std::ops::Range<usize> {
+    let a = cursor.position.to_char(text);
+    let b = cursor.selection.unwrap().to_char(text);
     a.min(b)..b.max(a)
 }
 
-pub fn undo(text: &mut Text, cursor: &mut Cursor) {
-    if text.index == 0 {
-        return;
-    }
-    let undo_point = &text.history[text.index - 1];
-    text.text = undo_point.text.clone();
-    cursor.position = undo_point.cursor.position;
-    cursor.selection = undo_point.cursor.selection;
-    cursor.remembered_x = undo_point.cursor.remembered_x;
-    text.index -= 1;
-}
-
-pub fn redo(text: &mut Text, cursor: &mut Cursor) {
-    if text.index + 1 >= text.history.len() {
-        return;
-    }
-
-    let undo_point = &text.history[text.index + 1];
-    text.text = undo_point.text.clone();
-    cursor.position = undo_point.cursor.position;
-    cursor.selection = undo_point.cursor.selection;
-
-    cursor.remembered_x = undo_point.cursor.remembered_x;
-    text.index += 1;
-}
-
-fn initialize_undo(text: &mut Text, cursor: &mut Cursor) {
-    if text.index == 0 {
-        text.history[0].cursor = cursor.clone();
-    }
-}
-
-fn add_undo_point(text: &mut Text, cursor: &mut Cursor) {
-    if text.index < text.history.len() {
-        text.history.truncate(text.index + 1)
-    }
-
-    text.history.push(UndoPoint {
-        text: text.text.clone(),
-        cursor: cursor.clone(),
-    });
-    text.index += 1;
-}
-
-pub fn insert_text(text: &mut Text, cursor: &mut Cursor, str: &str) {
-    initialize_undo(text, cursor);
-    let start_idx = cursor.position.to_char(&text.text);
-
-    if cursor.selection.is_some() {
-        let range = selection_range(text, cursor);
-        text.text.remove(range.clone());
-        text.text.insert(start_idx, str);
-        cursor.position = Point::from_char(range.start + str.chars().count(), &text.text);
+fn clamp(x: i64, min: i64, max: i64) -> i64 {
+    if x < min {
+        min
+    } else if x > max {
+        max
     } else {
-        text.text.insert(start_idx, str);
+        x
+    }
+}
 
-        let end_idx = start_idx + str.chars().count();
-        cursor.position = Point::from_char(end_idx, &text.text);
+struct BackwardIterator<'a> {
+    src: &'a mut ropey::iter::Chars<'a>,
+}
+
+impl<'a> Iterator for BackwardIterator<'a> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<char> {
+        self.src.prev()
+    }
+}
+
+fn next_word<'a, I>(iter: &mut I) -> i64
+where
+    I: Iterator<Item = char>,
+{
+    let mut count: i64 = 0;
+
+    match iter.next() {
+        Some(x) => {
+            if !x.is_alphanumeric() {
+                count += 1;
+                while let Some(e) = iter.next() {
+                    if e == '\n' {
+                        return count;
+                    }
+
+                    if e.is_alphanumeric() {
+                        break;
+                    } else {
+                        count += 1;
+                    }
+                }
+            }
+        }
+        None => {}
     }
 
-    cursor.remembered_x = cursor.position.x;
-    add_undo_point(text, cursor);
+    count += iter.take_while(|x| x.is_alphanumeric()).count() as i64;
+
+    return count + 1 as i64;
 }
 
 pub enum DeleteKey {
@@ -109,321 +84,210 @@ pub enum DeleteKey {
     Backspace,
 }
 
-pub fn delete_text(text: &mut Text, cursor: &mut Cursor, key: DeleteKey) {
-    fn delete_next_char(text: &mut Text, cursor: &mut Cursor) {
-        let start_idx = cursor.position.to_char(&text.text);
-        text.text
-            .remove(start_idx..(start_idx + 1).min(text.text.len_chars()));
+#[derive(Clone)]
+pub enum Selection {
+    Select,
+    NotSelect,
+}
+
+impl Text {
+    pub fn new<T: std::io::Read>(reader: T) -> Text {
+        let initial_text = ropey::Rope::from_reader(reader).unwrap();
+        let p = UndoPoint {
+            text: initial_text,
+            cursor: Cursor::new(),
+        };
+        return Text {
+            history: vec![p],
+            index: 0,
+            last_added: false,
+        };
     }
 
-    fn delete_previous_char(text: &mut Text, cursor: &mut Cursor) {
-        let start_idx = cursor.position.to_char(&text.text);
-        text.text.remove((start_idx.max(1) - 1)..start_idx);
-
-        cursor.position = Point::from_char(start_idx.max(1) - 1, &text.text);
+    pub fn get_string(&self) -> String {
+        self.history[self.index].text.to_string()
     }
 
-    initialize_undo(text, cursor);
+    pub fn get_cursor(&mut self) -> &mut Cursor {
+        &mut self.history[self.index].cursor
+    }
 
-    if cursor.selection.is_some() {
-        let range = selection_range(text, cursor);
-        text.text.remove(range.clone());
-        cursor.position = Point::from_char(range.start, &text.text);
-        cursor.selection = None;
-    } else {
-        match key {
-            DeleteKey::Del => {
-                delete_next_char(text, cursor);
+    pub fn current_point(&mut self) -> &mut UndoPoint {
+        &mut self.history[self.index]
+    }
+
+    pub fn get_text(&self) -> &ropey::Rope {
+        &self.history[self.index].text
+    }
+
+    pub fn insert_text(&mut self, str: &str) {
+        if str.len() > 1 || str.chars().nth(0).unwrap().is_whitespace() {
+            self.add_undo_point();
+        } else {
+            if !self.last_added {
+                self.add_undo_point();
             }
-            DeleteKey::Backspace => {
-                delete_previous_char(text, cursor);
+
+            self.last_added = true;
+        }
+
+        let UndoPoint { text, cursor } = self.current_point();
+
+        let start_idx = cursor.position.to_char(text);
+
+        if cursor.selection.is_some() {
+            let range = selection_range(text, cursor);
+            text.remove(range.clone());
+            text.insert(start_idx, str);
+            cursor.position = Point::from_char(range.start + str.chars().count(), text);
+        } else {
+            text.insert(start_idx, str);
+
+            let end_idx = start_idx + str.chars().count();
+            cursor.position = Point::from_char(end_idx, text);
+            cursor.remembered_x = cursor.position.x;
+        }
+    }
+
+    pub fn delete_text(&mut self, key: DeleteKey) {
+        self.add_undo_point();
+
+        let UndoPoint { text, cursor } = self.current_point();
+
+        fn delete_next_char(text: &mut ropey::Rope, cursor: &mut Cursor) {
+            let start_idx = cursor.position.to_char(text);
+            text.remove(start_idx..(start_idx + 1).min(text.len_chars()));
+        }
+
+        fn delete_previous_char(text: &mut ropey::Rope, cursor: &mut Cursor) {
+            let start_idx = cursor.position.to_char(text);
+            text.remove((start_idx.max(1) - 1)..start_idx);
+
+            cursor.position = Point::from_char(start_idx.max(1) - 1, text);
+        }
+
+        if cursor.selection.is_some() {
+            let range = selection_range(text, cursor);
+            text.remove(range.clone());
+            cursor.position = Point::from_char(range.start, text);
+            cursor.selection = None;
+        } else {
+            match key {
+                DeleteKey::Del => {
+                    delete_next_char(text, cursor);
+                }
+                DeleteKey::Backspace => {
+                    delete_previous_char(text, cursor);
+                }
             }
         }
     }
 
-    add_undo_point(text, cursor);
-}
-
-#[cfg(test)]
-mod tests {
-
-    use crate::cursor;
-    use crate::text::{delete_text, insert_text, redo, undo, DeleteKey, Text};
-    use cursor::{Cursor, Point};
-
-    fn create_text(initial_text: &str) -> (Text, Cursor) {
-        let reader = std::io::BufReader::new(initial_text.as_bytes());
-        let text = Text::new(reader);
-        let cursor = Cursor::new();
-        return (text, cursor);
+    pub fn add_undo_point(&mut self) {
+        self.last_added = true;
+        let undo_point = self.current_point().clone();
+        self.history.truncate(self.index + 1);
+        self.history.push(undo_point);
+        self.index = self.history.len() - 1;
     }
 
-    #[test]
-    fn should_insert_text_at_cursor() {
-        let (mut text, mut cursor) = create_text("initial text");
-
-        insert_text(&mut text, &mut cursor, "str ");
-        assert_eq!(text.text.to_string(), "str initial text");
+    pub fn undo(&mut self) {
+        self.last_added = false;
+        if self.index > 0 {
+            self.index -= 1;
+        }
     }
 
-    #[test]
-    fn should_insert_text_at_cursor_2() {
-        let (mut text, mut cursor) = create_text("initial text");
-
-        cursor.position = cursor::Point { x: 1, y: 0 };
-
-        insert_text(&mut text, &mut cursor, "str ");
-        assert_eq!(text.text.to_string(), "istr nitial text");
+    pub fn redo(&mut self) {
+        self.index = (self.index + 1).min(self.history.len() - 1);
     }
 
-    #[test]
-    fn should_insert_text_at_cursor_3() {
-        let (mut text, mut cursor) = create_text("initial text\nabc");
-
-        cursor.position = cursor::Point { x: 0, y: 1 };
-
-        insert_text(&mut text, &mut cursor, " str ");
-        assert_eq!(text.text.to_string(), "initial text\n str abc");
+    fn process_selection(&mut self, selection: Selection) {
+        let cursor = self.get_cursor();
+        match selection {
+            Selection::Select => {
+                cursor.selection = cursor.selection.or(Some(cursor.position.clone()))
+            }
+            Selection::NotSelect => cursor.selection = None,
+        }
     }
 
-    #[test]
-    fn should_move_cursor_position_after_insert() {
-        let (mut text, mut cursor) = create_text("initial text");
-
-        insert_text(&mut text, &mut cursor, "str");
-        assert_eq!(cursor.position.x, 3);
+    pub fn move_cursor(&mut self, by: i64, selection: Selection) {
+        self.process_selection(selection);
+        let UndoPoint { cursor, text } = self.current_point();
+        let idx = clamp(
+            cursor.position.to_char(text) as i64 + by,
+            0,
+            text.len_chars() as i64,
+        );
+        cursor.position = Point::from_char(idx as usize, text);
+        cursor.remembered_x = cursor.position.x
     }
 
-    #[test]
-    fn should_move_cursor_position_after_insert_2() {
-        let (mut text, mut cursor) = create_text("initial text");
+    pub fn move_cursor_y(&mut self, by: i64, selection: Selection) {
+        self.process_selection(selection);
+        let UndoPoint { cursor, text } = self.current_point();
+        let cursor_idx = cursor.position.to_char(text);
+        let line_idx = clamp(
+            text.char_to_line(cursor_idx) as i64 + by,
+            0,
+            text.len_lines() as i64 - 1,
+        ) as usize;
 
-        insert_text(&mut text, &mut cursor, "str\n1");
-        assert_eq!(cursor.position.x, 1);
-        assert_eq!(cursor.position.y, 1);
-        assert_eq!(cursor.remembered_x, 1);
+        let is_last_line = line_idx + 1 == text.len_lines();
+
+        let max = text.line(line_idx).len_chars() - if is_last_line { 0 } else { 1 };
+
+        let new_idx =
+            text.line_to_char(line_idx) + clamp(cursor.remembered_x, 0, max as i64) as usize;
+
+        cursor.position = Point::from_char(new_idx, text);
     }
 
-    #[test]
-    fn should_replace_selection() {
-        let (mut text, mut cursor) = create_text("initial text");
-        cursor.selection = Some(Point { x: 2, y: 0 });
+    pub fn move_to_next_word(&mut self, selection: Selection) {
+        self.process_selection(selection.clone());
 
-        insert_text(&mut text, &mut cursor, "str");
+        let UndoPoint { cursor, text } = self.current_point();
 
-        assert_eq!(text.text.to_string(), "stritial text");
-
-        assert_eq!(cursor.position.x, 3);
-        assert_eq!(cursor.position.y, 0);
+        let idx = cursor.position.to_char(text);
+        let move_by = next_word(&mut text.chars_at(idx).into_iter());
+        self.move_cursor(move_by, selection);
     }
 
-    #[test]
-    fn delete_should_delete_next_char() {
-        let (mut text, mut cursor) = create_text("initial text");
+    pub fn move_to_prev_word(&mut self, selection: Selection) {
+        self.process_selection(selection.clone());
 
-        delete_text(&mut text, &mut cursor, DeleteKey::Del);
+        let UndoPoint { cursor, text } = self.current_point();
 
-        assert_eq!(text.text.to_string(), "nitial text");
-        assert_eq!(cursor.position.x, 0);
-        assert_eq!(cursor.position.y, 0);
+        let idx = cursor.position.to_char(text);
+
+        let mut iter = BackwardIterator {
+            src: &mut text.chars_at(idx).into_iter(),
+        };
+
+        let move_by = next_word(&mut iter);
+        self.move_cursor(-move_by, selection);
     }
 
-    #[test]
-    fn delete_empty_string() {
-        let (mut text, mut cursor) = create_text("");
+    pub fn move_to_end_of_line(&mut self, selection: Selection) {
+        self.process_selection(selection);
 
-        delete_text(&mut text, &mut cursor, DeleteKey::Del);
+        let UndoPoint { cursor, text } = self.current_point();
 
-        assert_eq!(text.text.to_string(), "");
-        assert_eq!(cursor.position.x, 0);
-        assert_eq!(cursor.position.y, 0);
+        let is_last_line = cursor.position.y + 1 == text.len_lines() as i64;
+
+        cursor.position.x = text.line(cursor.position.y as usize).len_chars() as i64;
+
+        if !is_last_line {
+            cursor.position.x -= 1;
+        }
+        cursor.remembered_x = cursor.position.x;
     }
 
-    #[test]
-    fn delete_cursor_on_last_position() {
-        let (mut text, mut cursor) = create_text("text");
-        cursor.position.x = 4;
-        delete_text(&mut text, &mut cursor, DeleteKey::Del);
-
-        assert_eq!(text.text.to_string(), "text");
-        assert_eq!(cursor.position.x, 4);
+    pub fn move_to_beginning_of_line(&mut self, selection: Selection) {
+        self.process_selection(selection);
+        let UndoPoint { cursor, .. } = self.current_point();
+        cursor.position.x = 0;
+        cursor.remembered_x = 0;
     }
-
-    #[test]
-    fn delete_text_backspace() {
-        let (mut text, mut cursor) = create_text("initial text");
-
-        cursor.position.x = 2;
-
-        delete_text(&mut text, &mut cursor, DeleteKey::Backspace);
-
-        assert_eq!(text.text.to_string(), "iitial text");
-        assert_eq!(cursor.position.x, 1);
-        assert_eq!(cursor.position.y, 0);
-    }
-
-    #[test]
-    fn delete_text_backspace_empty_string() {
-        let (mut text, mut cursor) = create_text("");
-
-        delete_text(&mut text, &mut cursor, DeleteKey::Backspace);
-
-        assert_eq!(text.text.to_string(), "");
-        assert_eq!(cursor.position.x, 0);
-        assert_eq!(cursor.position.y, 0);
-    }
-
-    #[test]
-    fn delete_text_backspace_cursor_at_start() {
-        let (mut text, mut cursor) = create_text("text");
-
-        delete_text(&mut text, &mut cursor, DeleteKey::Backspace);
-
-        assert_eq!(text.text.to_string(), "text");
-        assert_eq!(cursor.position.x, 0);
-    }
-
-    #[test]
-    fn delete_selection() {
-        let (mut text, mut cursor) = create_text("text");
-        cursor.position.x = 3;
-        cursor.selection = Some(Point { x: 1, y: 0 });
-
-        delete_text(&mut text, &mut cursor, DeleteKey::Backspace);
-        assert_eq!(text.text.to_string(), "tt");
-        assert_eq!(cursor.position.x, 1);
-    }
-
-    #[test]
-    fn multiple_undo() {
-        let (mut text, mut cursor) = create_text("");
-        insert_text(&mut text, &mut cursor, "1");
-        insert_text(&mut text, &mut cursor, "1");
-        insert_text(&mut text, &mut cursor, "1");
-
-        undo(&mut text, &mut cursor);
-        assert_eq!(text.text.to_string(), "11");
-        assert_eq!(cursor.position.x, 2);
-
-        undo(&mut text, &mut cursor);
-        assert_eq!(text.text.to_string(), "1");
-        assert_eq!(cursor.position.x, 1);
-
-        undo(&mut text, &mut cursor);
-        assert_eq!(text.text.to_string(), "");
-        assert_eq!(cursor.position.x, 0);
-    }
-
-    #[test]
-    fn redo_test() {
-        let (mut text, mut cursor) = create_text("");
-        insert_text(&mut text, &mut cursor, "str");
-        undo(&mut text, &mut cursor);
-        redo(&mut text, &mut cursor);
-
-        insert_text(&mut text, &mut cursor, "str");
-        insert_text(&mut text, &mut cursor, "str");
-        undo(&mut text, &mut cursor);
-        undo(&mut text, &mut cursor);
-        redo(&mut text, &mut cursor);
-        redo(&mut text, &mut cursor);
-
-        assert_eq!(text.text.to_string(), "strstrstr");
-        assert_eq!(cursor.position.x, 9);
-        assert_eq!(cursor.position.y, 0);
-        assert_eq!(cursor.remembered_x, 9);
-    }
-
-    #[test]
-    fn should_reset_history_when_modify_undo() {
-        let (mut text, mut cursor) = create_text("");
-        insert_text(&mut text, &mut cursor, "1");
-        insert_text(&mut text, &mut cursor, "2");
-        undo(&mut text, &mut cursor);
-
-        insert_text(&mut text, &mut cursor, "3");
-        undo(&mut text, &mut cursor);
-        redo(&mut text, &mut cursor);
-
-        assert_eq!(text.text.to_string(), "13");
-        assert_eq!(cursor.position.x, 2);
-        assert_eq!(cursor.position.y, 0);
-        assert_eq!(cursor.remembered_x, 2);
-    }
-
-    #[test]
-    fn undo_past_history() {
-        let (mut text, mut cursor) = create_text("");
-
-        undo(&mut text, &mut cursor);
-
-        insert_text(&mut text, &mut cursor, "2");
-        undo(&mut text, &mut cursor);
-        undo(&mut text, &mut cursor);
-
-        assert_eq!(text.text.to_string(), "");
-        assert_eq!(cursor.position.x, 0);
-        assert_eq!(cursor.position.y, 0);
-        assert_eq!(cursor.remembered_x, 0);
-    }
-
-    #[test]
-    fn redo_past_history() {
-        let (mut text, mut cursor) = create_text("");
-        redo(&mut text, &mut cursor);
-        insert_text(&mut text, &mut cursor, "2");
-        undo(&mut text, &mut cursor);
-        redo(&mut text, &mut cursor);
-        redo(&mut text, &mut cursor);
-
-        assert_eq!(text.text.to_string(), "2");
-        assert_eq!(cursor.position.x, 1);
-        assert_eq!(cursor.position.y, 0);
-        assert_eq!(cursor.remembered_x, 1);
-    }
-
-    #[test]
-    fn undo_redo_delete_text() {
-        let (mut text, mut cursor) = create_text("123");
-
-        cursor.selection = Some(Point { x: 2, y: 0 });
-        delete_text(&mut text, &mut cursor, DeleteKey::Del);
-        undo(&mut text, &mut cursor);
-
-        assert_eq!(text.text.to_string(), "123");
-
-        redo(&mut text, &mut cursor);
-
-        assert_eq!(text.text.to_string(), "3");
-    }
-    #[test]
-    fn remove_selection_after_delete() {
-        let (mut text, mut cursor) = create_text("123");
-
-        cursor.selection = Some(Point { x: 2, y: 0 });
-        delete_text(&mut text, &mut cursor, DeleteKey::Del);
-
-        assert_eq!(cursor.selection.is_none(), true);
-    }
-
-    #[test]
-    fn retain_cursor_position_of_first_edit_2() {
-        let (mut text, mut cursor) = create_text("123");
-        cursor.position.x = 1;
-        delete_text(&mut text, &mut cursor, DeleteKey::Backspace);
-        undo(&mut text, &mut cursor);
-        assert_eq!(cursor.position.x, 1);
-
-        cursor.position.x = 2;
-
-        delete_text(&mut text, &mut cursor, DeleteKey::Backspace);
-        undo(&mut text, &mut cursor);
-
-        assert_eq!(cursor.position.x, 2);
-    }
-
-    // #[test]
-    // fn add_undo_point_on_whitespace() {
-    // 	let (mut text, mut cursor) = create_text("123");
-    // }
 }

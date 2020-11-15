@@ -1,28 +1,30 @@
 extern crate gl;
 extern crate glfw;
 
-use crate::cursor;
 use crate::font;
 use crate::matrix;
 use crate::rect;
 use crate::text;
 
-use cursor::Cursor;
+use crate::scroll;
+use scroll::Scroll;
+
 use font::font_renderer::FontRenderer;
 use rect::rect_renderer::RectRenderer;
 
-use std::fs::File;
+use std::{fs::File, marker::PhantomData};
 
-pub struct App {
+pub struct App<'t> {
     pub file_path: String,
     pub font_renderer: FontRenderer,
     pub rect_renderer: RectRenderer,
     pub projection: matrix::Matrix,
-    pub cursor: Cursor,
-    pub scroll: (i64, i64),
+    pub scroll: Scroll,
     pub should_rerender: bool,
     pub window: glfw::Window,
+    pub glfw: glfw::Glfw,
     pub text: text::Text,
+    p: PhantomData<&'t i32>,
 }
 
 pub fn projection_from_size(width: i32, height: i32) -> matrix::Matrix {
@@ -36,32 +38,39 @@ pub fn projection_from_size(width: i32, height: i32) -> matrix::Matrix {
     })
 }
 
-pub fn visible_range(app: &App) -> std::ops::Range<usize> {
+pub fn visible_range(app: &App, scroll_y: f32) -> std::ops::Range<usize> {
     let (_, y_size) = app.window.get_framebuffer_size();
-    let (_, scroll_y) = app.scroll;
+
 
     scroll_y as usize
         ..scroll_y as usize + ((y_size as f32) / app.font_renderer.advance_height).ceil() as usize
 }
 
-impl App {
-    pub fn new(window: glfw::Window, width: i32, height: i32, file_path: &str) -> App {
-        let text = text::Text::new(File::open(file_path).unwrap());
+impl<'tt> App<'tt> {
+    pub fn new<'t>(
+        window: glfw::Window,
+        glfw: glfw::Glfw,
+        width: i32,
+        height: i32,
+        file_path: String,
+    ) -> App<'t> {
+        let text = text::Text::new(File::open(file_path.clone()).unwrap());
 
         unsafe {
             gl::Viewport(0, 0, width, height);
         }
 
         return App {
-            file_path: file_path.into(),
+            file_path: file_path,
             font_renderer: FontRenderer::new(),
             rect_renderer: RectRenderer::new(),
             should_rerender: true,
             window: window,
-            cursor: Cursor::new(),
-            scroll: (0, 0),
+            glfw: glfw,
+            scroll: Scroll::new(),
             projection: projection_from_size(width, height),
             text: text,
+            p: PhantomData,
         };
     }
 }

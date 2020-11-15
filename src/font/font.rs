@@ -21,11 +21,11 @@ pub struct AtlasGlyph {
 
 #[repr(C)]
 pub struct GlyphInstance {
-    pos: [f32; 2],
-    dimensions: [f32; 2],
-    uv_pos: [f32; 2],
-    uv_dimensions: [f32; 2],
-    color: [f32; 3],
+    pub pos: [f32; 2],
+    pub dimensions: [f32; 2],
+    pub uv_pos: [f32; 2],
+    pub uv_dimensions: [f32; 2],
+    pub color: [f32; 3],
 }
 
 impl AtlasGlyph {

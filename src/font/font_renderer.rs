@@ -1,10 +1,12 @@
 extern crate freetype as ft;
 extern crate gl;
 
-use crate::shaders;
+use crate::{shaders};
 use std::ffi::CString;
 
 use crate::check_error;
+use crate::offset_of;
+
 use crate::font::font::{FontAtlas, GlyphInstance};
 use crate::matrix;
 
@@ -43,7 +45,7 @@ fn vao_setup() {
             gl::FLOAT,
             gl::FALSE,
             std::mem::size_of::<GlyphInstance>() as gl::types::GLint,
-            std::ptr::null(),
+            offset_of!(GlyphInstance, pos) as *const gl::types::GLvoid,
         );
         gl::VertexAttribDivisor(0, 1);
         check_error!();
@@ -56,7 +58,7 @@ fn vao_setup() {
             gl::FLOAT,
             gl::FALSE,
             std::mem::size_of::<GlyphInstance>() as gl::types::GLint,
-            (2 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
+            offset_of!(GlyphInstance, dimensions) as *const gl::types::GLvoid,
         );
         gl::VertexAttribDivisor(1, 1);
 
@@ -67,7 +69,7 @@ fn vao_setup() {
             gl::FLOAT,
             gl::FALSE,
             std::mem::size_of::<GlyphInstance>() as gl::types::GLint,
-            (4 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
+            offset_of!(GlyphInstance, uv_pos) as *const gl::types::GLvoid,
         );
         gl::VertexAttribDivisor(2, 1);
 
@@ -78,7 +80,7 @@ fn vao_setup() {
             gl::FLOAT,
             gl::FALSE,
             std::mem::size_of::<GlyphInstance>() as gl::types::GLint,
-            (6 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
+            offset_of!(GlyphInstance, uv_dimensions) as *const gl::types::GLvoid,
         );
         gl::VertexAttribDivisor(3, 1);
 
@@ -89,7 +91,7 @@ fn vao_setup() {
             gl::FLOAT,
             gl::FALSE,
             std::mem::size_of::<GlyphInstance>() as gl::types::GLint,
-            (8 * std::mem::size_of::<f32>()) as *const gl::types::GLvoid,
+            offset_of!(GlyphInstance, color) as *const gl::types::GLvoid,
         );
         gl::VertexAttribDivisor(4, 1);
     }

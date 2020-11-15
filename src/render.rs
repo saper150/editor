@@ -26,23 +26,23 @@ fn grid_to_screen(app: &App, pos: Point) -> (f32, f32) {
 fn render_selection(app: &mut App, projection: &Matrix) {
     let height = app.font_renderer.advance_height;
 
-    if app.cursor.selection.is_none() {
+    if app.text.get_cursor().selection.is_none() {
         return;
     }
 
-    let selection = app.cursor.selection.unwrap();
+    let selection = app.text.get_cursor().selection.unwrap();
 
-    let (start, end) = if selection.y == app.cursor.position.y {
-        if selection.x >= app.cursor.position.x {
-            (app.cursor.position, selection)
+    let (start, end) = if selection.y == app.text.get_cursor().position.y {
+        if selection.x >= app.text.get_cursor().position.x {
+            (app.text.get_cursor().position, selection)
         } else {
-            (selection, app.cursor.position)
+            (selection, app.text.get_cursor().position)
         }
     } else {
-        if selection.y > app.cursor.position.y {
-            (app.cursor.position, selection)
+        if selection.y > app.text.get_cursor().position.y {
+            (app.text.get_cursor().position, selection)
         } else {
-            (selection, app.cursor.position)
+            (selection, app.text.get_cursor().position)
         }
     };
 
@@ -63,7 +63,7 @@ fn render_selection(app: &mut App, projection: &Matrix) {
             start_screen.1,
             x_to_screen(
                 app,
-                app.text.text.line(start.y as usize).len_chars() as i64 - start.x,
+                app.text.get_text().line(start.y as usize).len_chars() as i64 - start.x,
             ),
             height,
             [0.5, 0.5, 0.5],
@@ -71,7 +71,7 @@ fn render_selection(app: &mut App, projection: &Matrix) {
 
         for (i, l) in app
             .text
-            .text
+            .get_text()
             .lines_at(start.y as usize + 1)
             .take((end.y - start.y) as usize - 1)
             .enumerate()
@@ -101,27 +101,17 @@ fn render_selection(app: &mut App, projection: &Matrix) {
     app.rect_renderer.render(&v, &projection);
 }
 
-fn clamp_scroll(app: &mut App) {
-    let visible_range = app::visible_range(app);
-    if app.cursor.position.y > visible_range.end as i64 - 2 {
-        app.scroll.1 =
-            app.cursor.position.y + 2 - ((visible_range.end - visible_range.start) as i64);
-    }
-
-    if app.cursor.position.y < visible_range.start as i64 {
-        app.scroll.1 = app.cursor.position.y;
-    }
-}
-
 fn mvp_matrix(app: &App) -> Matrix {
-    let screen_scroll = app.scroll.1 as f32 * app.font_renderer.advance_height;
+    let screen_scroll = app.scroll.current_scroll.y * app.font_renderer.advance_height;
     matrix::mul(&app.projection, &matrix::translate(0.0, screen_scroll, 0.0))
 }
 
 fn render_cursor(app: &mut App, mvp: &matrix::Matrix) {
     let width = 2.0;
     let height = app.font_renderer.advance_height;
-    let screen_pos = grid_to_screen(app, app.cursor.position);
+
+    let cursor_position = app.text.get_cursor().position;
+    let screen_pos = grid_to_screen(app, cursor_position);
 
     app.rect_renderer.render(
         &vec![create_rect(
@@ -141,14 +131,12 @@ pub fn render_app(app: &mut App) {
             gl::Clear(gl::COLOR_BUFFER_BIT);
         }
 
-        clamp_scroll(app);
-
         let mvp = mvp_matrix(app);
         render_selection(app, &mvp);
         render_cursor(app, &mvp);
 
         app.font_renderer
-            .render(&app.text.text, app::visible_range(app), &mvp);
+            .render(&app.text.get_text(), app::visible_range(app, app.scroll.current_scroll.y), &mvp);
 
         app.window.swap_buffers();
         app.should_rerender = false;
