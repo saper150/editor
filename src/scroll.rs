@@ -32,9 +32,16 @@ impl Scroll {
 }
 
 pub fn scroll_to(scroll: &mut Scroll, y: f32) {
-	scroll.target_scroll.y = y;
-	scroll.base_scroll = scroll.current_scroll;
-	scroll.animation_time = 0.0;
+	if (scroll.current_scroll.y - y).abs() <= 2.0 {
+		scroll.current_scroll.y = y;
+		scroll.target_scroll = scroll.current_scroll;
+		scroll.base_scroll = scroll.current_scroll;
+		scroll.animation_time = 0.0;
+	} else {
+		scroll.target_scroll.y = y;
+		scroll.base_scroll = scroll.current_scroll;
+		scroll.animation_time = 0.0;
+	}
 }
 
 pub fn advance_scroll(scroll: &mut Scroll, time: f32) -> bool {

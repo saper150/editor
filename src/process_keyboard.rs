@@ -1,10 +1,10 @@
 use crate::{app, text::Selection};
-use crate::{program::Program, text};
+use crate::{text};
 
 use app::App;
 
 use glfw::Key;
-use std::{cell::RefCell, fs, rc::Rc};
+use std::{fs};
 
 struct BackwardIterator<'a> {
     src: &'a mut ropey::iter::Chars<'a>,

@@ -143,6 +143,20 @@ fn delete_selection() {
     assert_eq!(text.get_cursor().position.x, 1);
 }
 
+
+#[test]
+fn undo_on_empty_delete() {
+    let mut text = create_text("text");
+
+    text.delete_text(DeleteKey::Del);
+    text.delete_text(DeleteKey::Backspace);
+    text.delete_text(DeleteKey::Backspace);
+    text.undo();
+    assert_eq!(text.get_string(), "text");
+    assert_eq!(text.get_cursor().position.x, 0);
+}
+
+
 #[test]
 fn multiple_undo() {
     let mut text = create_text("");
@@ -307,6 +321,39 @@ fn add_undo_on_whitespace() {
     text.undo();
     assert_eq!(text.get_string(), "");
 }
+
+
+#[test]
+fn group_delete_undo() {
+    let mut text = create_text("   ");
+    text.move_cursor(3, Selection::NotSelect);
+
+    text.delete_text(DeleteKey::Backspace);
+    text.delete_text(DeleteKey::Backspace);
+    text.delete_text(DeleteKey::Backspace);
+
+    text.undo();
+    assert_eq!(text.get_string(), "   ");
+}
+
+#[test]
+fn group_delete_undo_line_brake() {
+    let mut text = create_text("\n\n\n");
+    text.move_cursor(3, Selection::NotSelect);
+
+    text.delete_text(DeleteKey::Backspace);
+    text.delete_text(DeleteKey::Backspace);
+    text.delete_text(DeleteKey::Backspace);
+
+    text.undo();
+    assert_eq!(text.get_string(), "\n");
+    text.undo();
+    assert_eq!(text.get_string(), "\n\n");
+    text.undo();
+    assert_eq!(text.get_string(), "\n\n\n");
+
+}
+
 
 #[test]
 fn move_cursor_right() {

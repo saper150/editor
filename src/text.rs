@@ -120,15 +120,19 @@ impl Text {
         &self.history[self.index].text
     }
 
+    fn soft_undo_point(&mut self) {
+        if !self.last_added {
+            self.add_undo_point();
+        }
+
+        self.last_added = true;
+    }
+
     pub fn insert_text(&mut self, str: &str) {
         if str.len() > 1 || str.chars().nth(0).unwrap().is_whitespace() {
             self.add_undo_point();
         } else {
-            if !self.last_added {
-                self.add_undo_point();
-            }
-
-            self.last_added = true;
+            self.soft_undo_point();
         }
 
         let UndoPoint { text, cursor } = self.current_point();
@@ -150,36 +154,61 @@ impl Text {
     }
 
     pub fn delete_text(&mut self, key: DeleteKey) {
-        self.add_undo_point();
 
-        let UndoPoint { text, cursor } = self.current_point();
-
-        fn delete_next_char(text: &mut ropey::Rope, cursor: &mut Cursor) {
+        
+        fn char_to_delete_next(text: &mut ropey::Rope, cursor: &mut Cursor) -> Option<usize> {
             let start_idx = cursor.position.to_char(text);
-            text.remove(start_idx..(start_idx + 1).min(text.len_chars()));
+
+            if start_idx < text.len_chars() {
+                return Some(start_idx)
+            }
+            None
         }
 
-        fn delete_previous_char(text: &mut ropey::Rope, cursor: &mut Cursor) {
+        fn char_to_delete_previous(text: &mut ropey::Rope, cursor: &mut Cursor) -> Option<usize> {
             let start_idx = cursor.position.to_char(text);
-            text.remove((start_idx.max(1) - 1)..start_idx);
 
-            cursor.position = Point::from_char(start_idx.max(1) - 1, text);
+            if start_idx > 0 {
+                return Some(start_idx - 1);
+            }
+            return None
+
         }
+        
+        if self.current_point().cursor.selection.is_some() {
+            
+            self.add_undo_point();
 
-        if cursor.selection.is_some() {
+            let UndoPoint { text, cursor } = self.current_point();
             let range = selection_range(text, cursor);
             text.remove(range.clone());
             cursor.position = Point::from_char(range.start, text);
             cursor.selection = None;
         } else {
-            match key {
+            let char_to_delete = match key {
                 DeleteKey::Del => {
-                    delete_next_char(text, cursor);
+                    let UndoPoint { text, cursor } = self.current_point();
+                    char_to_delete_next(text, cursor)
                 }
                 DeleteKey::Backspace => {
-                    delete_previous_char(text, cursor);
+                    let UndoPoint { text, cursor } = self.current_point();
+                    char_to_delete_previous(text, cursor)
                 }
+            };
+
+            if let Some(idx) = char_to_delete {
+                if self.current_point().text.char(idx) == '\n' {
+                    self.add_undo_point();
+                } else {
+                    self.soft_undo_point();
+                }
+                let point = self.current_point();
+                point.cursor.position = Point::from_char(idx, &point.text);
+                point.text.remove(idx..(idx + 1));
             }
+
+
+
         }
     }
 
