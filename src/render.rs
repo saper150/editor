@@ -22,8 +22,7 @@ fn grid_to_screen(app: &App, pos: Point) -> (f32, f32) {
     (x_to_screen(app, pos.x), y_to_screen(app, pos.y))
 }
 
-// @todo render only visible selection
-fn render_selection(app: &mut App, projection: &Matrix) {
+fn render_selection(app: &mut App, projection: &Matrix, range: std::ops::Range<usize>) {
     let height = app.font_renderer.advance_height;
 
     if app.text.get_cursor().selection.is_none() {
@@ -32,7 +31,7 @@ fn render_selection(app: &mut App, projection: &Matrix) {
 
     let selection = app.text.get_cursor().selection.unwrap();
 
-    let (start, end) = if selection.y == app.text.get_cursor().position.y {
+    let (mut start, mut end) = if selection.y == app.text.get_cursor().position.y {
         if selection.x >= app.text.get_cursor().position.x {
             (app.text.get_cursor().position, selection)
         } else {
@@ -45,6 +44,9 @@ fn render_selection(app: &mut App, projection: &Matrix) {
             (selection, app.text.get_cursor().position)
         }
     };
+
+    start.y = start.y.max(range.start as i64);
+    end.y = end.y.min(range.end as i64);
 
     let mut v = Vec::new();
 
@@ -131,12 +133,14 @@ pub fn render_app(app: &mut App) {
             gl::Clear(gl::COLOR_BUFFER_BIT);
         }
 
+        let visible_range = app::visible_range(app, app.scroll.current_scroll.y);
+
         let mvp = mvp_matrix(app);
-        render_selection(app, &mvp);
+        render_selection(app, &mvp, visible_range.clone());
         render_cursor(app, &mvp);
 
         app.font_renderer
-            .render(&app.text.get_text(), app::visible_range(app, app.scroll.current_scroll.y), &mvp);
+            .render(&app.text.get_text(), visible_range, &mvp);
 
         app.window.swap_buffers();
         app.should_rerender = false;
