@@ -1,4 +1,4 @@
-use crate::{shaders};
+use crate::shaders;
 use std::ffi::CString;
 
 use crate::check_error;

@@ -1,6 +1,9 @@
+use std::{io::Read, ptr};
+
 use crate::cursor;
 
 use cursor::{Cursor, Point};
+use memchr::memchr_iter;
 
 #[derive(Clone, Debug)]
 pub struct UndoPoint {
@@ -84,6 +87,60 @@ pub enum DeleteKey {
     Backspace,
 }
 
+
+struct RemoveCrlf<T: std::io::Read> {
+	reader: T,
+	matches: Vec<usize>,
+}
+
+impl<T: std::io::Read> RemoveCrlf<T> {
+	pub fn new(reader :T) -> RemoveCrlf<T> {
+		return RemoveCrlf {
+			reader,
+			matches: vec![],
+		}
+	}
+
+}
+
+
+fn remove_from_buff(buf: &mut [u8], matches: &[usize]) {
+
+	let b = buf.as_mut_ptr();
+	for i in 0..matches.len() - 1 {
+		let current = matches[i] as isize;
+		let next = matches[i + 1] as isize;
+		unsafe {
+			ptr::copy(
+				b.offset(current + 1),
+				b.offset(current - i as isize),
+				(next - current) as usize,
+			)
+		}
+	}
+}
+
+
+impl<T: std::io::Read> Read for RemoveCrlf<T> {
+
+	fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+
+		let res = self.reader.read(buf)?;
+		let s = &mut buf[..res];
+
+
+		self.matches.clear();
+		self.matches.extend(
+			memchr_iter('\r' as u8, s)
+		);
+		self.matches.push(res);
+		remove_from_buff(s, &self.matches);
+
+		return Ok(res - (self.matches.len() - 1))
+	}
+}
+
+
 #[derive(Clone)]
 pub enum Selection {
     Select,
@@ -92,7 +149,7 @@ pub enum Selection {
 
 impl Text {
     pub fn new<T: std::io::Read>(reader: T) -> Text {
-        let initial_text = ropey::Rope::from_reader(reader).unwrap();
+        let initial_text = ropey::Rope::from_reader(RemoveCrlf::new(reader)).unwrap();
         let p = UndoPoint {
             text: initial_text,
             cursor: Cursor::new(),
@@ -142,8 +199,9 @@ impl Text {
         if cursor.selection.is_some() {
             let range = selection_range(text, cursor);
             text.remove(range.clone());
-            text.insert(start_idx, str);
+            text.insert(range.start, str);
             cursor.position = Point::from_char(range.start + str.chars().count(), text);
+            cursor.selection = None
         } else {
             text.insert(start_idx, str);
 
@@ -154,13 +212,11 @@ impl Text {
     }
 
     pub fn delete_text(&mut self, key: DeleteKey) {
-
-        
         fn char_to_delete_next(text: &mut ropey::Rope, cursor: &mut Cursor) -> Option<usize> {
             let start_idx = cursor.position.to_char(text);
 
             if start_idx < text.len_chars() {
-                return Some(start_idx)
+                return Some(start_idx);
             }
             None
         }
@@ -171,12 +227,10 @@ impl Text {
             if start_idx > 0 {
                 return Some(start_idx - 1);
             }
-            return None
-
+            return None;
         }
-        
+
         if self.current_point().cursor.selection.is_some() {
-            
             self.add_undo_point();
 
             let UndoPoint { text, cursor } = self.current_point();
@@ -206,9 +260,6 @@ impl Text {
                 point.cursor.position = Point::from_char(idx, &point.text);
                 point.text.remove(idx..(idx + 1));
             }
-
-
-
         }
     }
 
@@ -318,5 +369,31 @@ impl Text {
         let UndoPoint { cursor, .. } = self.current_point();
         cursor.position.x = 0;
         cursor.remembered_x = 0;
+    }
+
+    pub fn move_to_end(&mut self, selection: Selection) {
+        self.process_selection(selection);
+        let UndoPoint { cursor, text } = self.current_point();
+
+        cursor.position = Point::from_char(text.len_chars(), text);
+    }
+
+    pub fn move_to_begging(&mut self, selection: Selection) {
+        self.process_selection(selection);
+        let UndoPoint { cursor, .. } = self.current_point();
+
+        cursor.position = Point { x: 0, y: 0 }
+    }
+
+    pub fn get_selection(&mut self) -> String {
+        let UndoPoint { cursor, text } = self.current_point();
+
+        let e = selection_range(text, cursor);
+        text.slice(e).to_string()
+    }
+
+    pub fn get_current_line(&mut self) -> String {
+        let UndoPoint { cursor, text } = self.current_point();
+        return text.line(cursor.position.y as usize).to_string();
     }
 }

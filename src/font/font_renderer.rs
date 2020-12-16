@@ -1,7 +1,7 @@
 extern crate freetype as ft;
 extern crate gl;
 
-use crate::{shaders};
+use crate::shaders;
 use std::ffi::CString;
 
 use crate::check_error;
@@ -180,7 +180,9 @@ impl FontRenderer {
             gl::BindBuffer(gl::ARRAY_BUFFER, self.quad_buffer_object);
         }
 
-        let lines = text.lines_at(range.start).take(range.end - range.start);
+        let lines = text
+            .lines_at(range.start.min(text.len_lines()))
+            .take(range.end - range.start);
 
         let car_count = lines.clone().map(|x| x.len_chars()).sum();
         if self.quad_buffer_size < car_count {

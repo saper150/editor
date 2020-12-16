@@ -1,22 +1,19 @@
-
 extern crate gl;
 
 extern crate glfw;
 use glfw::Context;
 
+use crate::app;
 use crate::process_keyboard;
 use crate::render;
-use crate::app;
 use crate::scroll;
 use app::{projection_from_size, App};
 
-use std::{cell::RefCell, env, rc::Rc, time::Instant};
-
+use std::{env, time::Instant};
 
 fn clamp_scroll(app: &mut App) {
     let visible_range = app::visible_range(app, app.scroll.target_scroll.y);
     if app.text.get_cursor().position.y > visible_range.end as i64 - 3 {
-
         let target_scroll = app.text.get_cursor().position.y + 3
             - ((visible_range.end - visible_range.start) as i64);
         scroll::scroll_to(&mut app.scroll, target_scroll as f32)
@@ -28,15 +25,14 @@ fn clamp_scroll(app: &mut App) {
     }
 }
 
-pub struct Program<'t> {
+pub struct Program {
     events: std::sync::mpsc::Receiver<(f64, glfw::WindowEvent)>,
-    pub app: Rc<RefCell<App<'t>>>,
-    p: std::marker::PhantomData<&'t i32>,
+    pub app: App,
     // pub task_executor: Executor<'t>,
 }
 
-impl<'t> Program<'t> {
-    pub fn new<'a>() -> Program<'a> {
+impl<'t> Program {
+    pub fn new() -> Program {
         let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
 
         let (mut window, events) = glfw
@@ -72,31 +68,24 @@ impl<'t> Program<'t> {
             "./text.txt".into()
         };
 
-        let app = Rc::new(RefCell::new(App::new(window, glfw, 800, 600, file_path)));
+        let app = App::new(window, glfw, 800, 600, file_path);
 
-        Program {
-            events,
-            // task_executor: Executor::new(&app),
-            app,
-            p: std::marker::PhantomData
-        }
+        Program { events, app }
     }
 
     pub fn run(self) {
-        let mut app = self.app.borrow_mut();
+        let mut app = self.app;
 
         let mut now = Instant::now();
 
         while !app.window.should_close() {
-
             app.glfw.wait_events();
-            
+
             let dt = now.elapsed().as_secs_f32();
             now = Instant::now();
-            
-            
+
             for (_, event) in glfw::flush_messages(&self.events) {
-                Program::process_event(&mut app , &event);
+                Program::process_event(&mut app, &event);
             }
 
             if scroll::advance_scroll(&mut app.scroll, dt) {
@@ -106,7 +95,6 @@ impl<'t> Program<'t> {
 
             render::render_app(&mut app);
         }
-
     }
 
     pub fn process_event(app: &mut App, event: &glfw::WindowEvent) {

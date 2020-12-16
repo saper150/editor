@@ -2,7 +2,6 @@ use gl;
 use std;
 use std::ffi::{CStr, CString};
 
-
 #[derive(Copy, Clone)]
 pub struct Program {
     pub id: gl::types::GLuint,

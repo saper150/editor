@@ -1,10 +1,10 @@
+use crate::text;
 use crate::{app, text::Selection};
-use crate::{text};
 
 use app::App;
 
 use glfw::Key;
-use std::{fs};
+use std::fs;
 
 struct BackwardIterator<'a> {
     src: &'a mut ropey::iter::Chars<'a>,
@@ -92,16 +92,42 @@ pub fn process_keyboard(
             app.text.move_cursor_y(1, selection);
         }
         Key::End => {
-            app.text.move_to_end_of_line(selection);
+            if modifiers.contains(glfw::Modifiers::Control) {
+                app.text.move_to_end(selection);
+            } else {
+                app.text.move_to_end_of_line(selection);
+            }
         }
         Key::Home => {
-            app.text.move_to_beginning_of_line(selection);
+            if modifiers.contains(glfw::Modifiers::Control) {
+                app.text.move_to_begging(selection);
+            } else {
+                app.text.move_to_beginning_of_line(selection);
+            }
         }
         Key::PageDown => {
             app.text.move_cursor_y(20, selection);
         }
         Key::PageUp => {
             app.text.move_cursor_y(-20, selection);
+        }
+        Key::V => {
+            if modifiers.contains(glfw::Modifiers::Control) {
+                if let Some(s) = app.window.get_clipboard_string() {
+                    app.text.insert_text(s.as_str())
+                }
+            }
+        }
+        Key::C => {
+            if modifiers.contains(glfw::Modifiers::Control) {
+                if app.text.get_cursor().selection.is_some() {
+                    let selection_str = app.text.get_selection();
+                    app.window.set_clipboard_string(selection_str.as_str());
+                } else {
+                    let selection_str = app.text.get_current_line();
+                    app.window.set_clipboard_string(selection_str.as_str());
+                }
+            }
         }
         _ => {}
     }

@@ -143,7 +143,6 @@ fn delete_selection() {
     assert_eq!(text.get_cursor().position.x, 1);
 }
 
-
 #[test]
 fn undo_on_empty_delete() {
     let mut text = create_text("text");
@@ -156,15 +155,12 @@ fn undo_on_empty_delete() {
     assert_eq!(text.get_cursor().position.x, 0);
 }
 
-
 #[test]
 fn multiple_undo() {
     let mut text = create_text("");
     text.insert_text("11");
     text.insert_text("11");
     text.insert_text("11");
-
-    println!("{:?}", text.history);
 
     text.undo();
     assert_eq!(text.get_string(), "1111");
@@ -322,7 +318,6 @@ fn add_undo_on_whitespace() {
     assert_eq!(text.get_string(), "");
 }
 
-
 #[test]
 fn group_delete_undo() {
     let mut text = create_text("   ");
@@ -351,9 +346,7 @@ fn group_delete_undo_line_brake() {
     assert_eq!(text.get_string(), "\n\n");
     text.undo();
     assert_eq!(text.get_string(), "\n\n\n");
-
 }
-
 
 #[test]
 fn move_cursor_right() {
@@ -655,4 +648,41 @@ fn process_selection_beginning_of_line() {
 
     assert_eq!(text.get_cursor().selection.unwrap().x, 7);
     assert_eq!(text.get_cursor().selection.unwrap().y, 0);
+}
+
+#[test]
+fn move_cursor_to_end() {
+    let mut text = create_text("abc abc\nc");
+    text.move_to_end(Selection::NotSelect);
+
+    assert_eq!(text.get_cursor().position.x, 1);
+    assert_eq!(text.get_cursor().position.y, 1);
+}
+
+#[test]
+fn move_cursor_to_begging() {
+    let mut text = create_text("abc abc\nc");
+    text.move_to_end(Selection::NotSelect);
+    text.move_to_begging(Selection::NotSelect);
+
+    assert_eq!(text.get_cursor().position.x, 0);
+    assert_eq!(text.get_cursor().position.y, 0);
+}
+
+#[test]
+fn replace_selection() {
+    let mut text = create_text("abc");
+    text.move_cursor(3, Selection::Select);
+    text.insert_text("www");
+    assert_eq!(text.get_text(), "www");
+    assert_eq!(text.get_cursor().position.x, 3);
+    assert_eq!(text.get_cursor().position.y, 0);
+    assert_eq!(text.get_cursor().selection.is_none(), true);
+}
+
+
+#[test]
+fn remove_crlf() {
+    let text = create_text("\r\n\r\nline 1\r\nline 2\r\n");
+	assert_eq!(text.get_text(), "\n\nline 1\nline 2\n");
 }

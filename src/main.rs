@@ -7,16 +7,16 @@ mod check_error;
 mod cursor;
 mod font;
 mod matrix;
+mod offset_of;
 mod process_keyboard;
 mod program;
 mod rect;
 mod render;
+mod scroll;
 mod shaders;
 mod task_executor;
 mod text;
 mod timer;
-mod offset_of;
-mod scroll;
 
 fn main() {
     let program = program::Program::new();

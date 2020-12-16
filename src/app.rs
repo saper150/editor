@@ -12,9 +12,9 @@ use scroll::Scroll;
 use font::font_renderer::FontRenderer;
 use rect::rect_renderer::RectRenderer;
 
-use std::{fs::File, marker::PhantomData};
+use std::fs::File;
 
-pub struct App<'t> {
+pub struct App {
     pub file_path: String,
     pub font_renderer: FontRenderer,
     pub rect_renderer: RectRenderer,
@@ -24,7 +24,6 @@ pub struct App<'t> {
     pub window: glfw::Window,
     pub glfw: glfw::Glfw,
     pub text: text::Text,
-    p: PhantomData<&'t i32>,
 }
 
 pub fn projection_from_size(width: i32, height: i32) -> matrix::Matrix {
@@ -41,19 +40,18 @@ pub fn projection_from_size(width: i32, height: i32) -> matrix::Matrix {
 pub fn visible_range(app: &App, scroll_y: f32) -> std::ops::Range<usize> {
     let (_, y_size) = app.window.get_framebuffer_size();
 
-
     scroll_y as usize
         ..scroll_y as usize + ((y_size as f32) / app.font_renderer.advance_height).ceil() as usize
 }
 
-impl<'tt> App<'tt> {
-    pub fn new<'t>(
+impl App {
+    pub fn new(
         window: glfw::Window,
         glfw: glfw::Glfw,
         width: i32,
         height: i32,
         file_path: String,
-    ) -> App<'t> {
+    ) -> App {
         let text = text::Text::new(File::open(file_path.clone()).unwrap());
 
         unsafe {
@@ -70,7 +68,6 @@ impl<'tt> App<'tt> {
             scroll: Scroll::new(),
             projection: projection_from_size(width, height),
             text: text,
-            p: PhantomData,
         };
     }
 }
