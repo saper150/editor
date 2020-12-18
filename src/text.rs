@@ -23,12 +23,6 @@ pub struct Text {
     pub last_added: bool,
 }
 
-fn selection_range(text: &ropey::Rope, cursor: &Cursor) -> std::ops::Range<usize> {
-    let a = cursor.position.to_char(text);
-    let b = cursor.selection.unwrap().to_char(text);
-    a.min(b)..b.max(a)
-}
-
 fn clamp(x: i64, min: i64, max: i64) -> i64 {
     if x < min {
         min
@@ -82,64 +76,53 @@ where
     return count + 1 as i64;
 }
 
-pub enum DeleteKey {
-    Del,
-    Backspace,
+pub enum DeleteDirection {
+    Forward,
+    Back,
 }
 
-
 struct RemoveCrlf<T: std::io::Read> {
-	reader: T,
-	matches: Vec<usize>,
+    reader: T,
+    matches: Vec<usize>,
 }
 
 impl<T: std::io::Read> RemoveCrlf<T> {
-	pub fn new(reader :T) -> RemoveCrlf<T> {
-		return RemoveCrlf {
-			reader,
-			matches: vec![],
-		}
-	}
-
+    pub fn new(reader: T) -> RemoveCrlf<T> {
+        return RemoveCrlf {
+            reader,
+            matches: vec![],
+        };
+    }
 }
 
-
-fn remove_from_buff(buf: &mut [u8], matches: &[usize]) {
-
-	let b = buf.as_mut_ptr();
-	for i in 0..matches.len() - 1 {
-		let current = matches[i] as isize;
-		let next = matches[i + 1] as isize;
-		unsafe {
-			ptr::copy(
-				b.offset(current + 1),
-				b.offset(current - i as isize),
-				(next - current) as usize,
-			)
-		}
-	}
+pub fn remove_crlf_from_buff(buf: &mut [u8], matches: &[usize]) {
+    let b = buf.as_mut_ptr();
+    for i in 0..matches.len() - 1 {
+        let current = matches[i] as isize;
+        let next = matches[i + 1] as isize;
+        unsafe {
+            ptr::copy(
+                b.offset(current + 1),
+                b.offset(current - i as isize),
+                (next - current) as usize,
+            )
+        }
+    }
 }
-
 
 impl<T: std::io::Read> Read for RemoveCrlf<T> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let res = self.reader.read(buf)?;
+        let s = &mut buf[..res];
 
-	fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.matches.clear();
+        self.matches.extend(memchr_iter('\r' as u8, s));
+        self.matches.push(res);
+        remove_crlf_from_buff(s, &self.matches);
 
-		let res = self.reader.read(buf)?;
-		let s = &mut buf[..res];
-
-
-		self.matches.clear();
-		self.matches.extend(
-			memchr_iter('\r' as u8, s)
-		);
-		self.matches.push(res);
-		remove_from_buff(s, &self.matches);
-
-		return Ok(res - (self.matches.len() - 1))
-	}
+        return Ok(res - (self.matches.len() - 1));
+    }
 }
-
 
 #[derive(Clone)]
 pub enum Selection {
@@ -161,6 +144,7 @@ impl Text {
         };
     }
 
+    #[allow(dead_code)]
     pub fn get_string(&self) -> String {
         self.history[self.index].text.to_string()
     }
@@ -192,17 +176,17 @@ impl Text {
             self.soft_undo_point();
         }
 
-        let UndoPoint { text, cursor } = self.current_point();
+        if let Some(range) = self.selection_range() {
+            let UndoPoint { text, cursor } = self.current_point();
 
-        let start_idx = cursor.position.to_char(text);
-
-        if cursor.selection.is_some() {
-            let range = selection_range(text, cursor);
             text.remove(range.clone());
             text.insert(range.start, str);
             cursor.position = Point::from_char(range.start + str.chars().count(), text);
             cursor.selection = None
         } else {
+            let UndoPoint { text, cursor } = self.current_point();
+            let start_idx = cursor.position.to_char(text);
+
             text.insert(start_idx, str);
 
             let end_idx = start_idx + str.chars().count();
@@ -211,7 +195,7 @@ impl Text {
         }
     }
 
-    pub fn delete_text(&mut self, key: DeleteKey) {
+    pub fn delete_text(&mut self, key: DeleteDirection) {
         fn char_to_delete_next(text: &mut ropey::Rope, cursor: &mut Cursor) -> Option<usize> {
             let start_idx = cursor.position.to_char(text);
 
@@ -230,21 +214,20 @@ impl Text {
             return None;
         }
 
-        if self.current_point().cursor.selection.is_some() {
+        if let Some(range) = self.selection_range() {
             self.add_undo_point();
 
             let UndoPoint { text, cursor } = self.current_point();
-            let range = selection_range(text, cursor);
             text.remove(range.clone());
             cursor.position = Point::from_char(range.start, text);
             cursor.selection = None;
         } else {
             let char_to_delete = match key {
-                DeleteKey::Del => {
+                DeleteDirection::Forward => {
                     let UndoPoint { text, cursor } = self.current_point();
                     char_to_delete_next(text, cursor)
                 }
-                DeleteKey::Backspace => {
+                DeleteDirection::Back => {
                     let UndoPoint { text, cursor } = self.current_point();
                     char_to_delete_previous(text, cursor)
                 }
@@ -385,15 +368,48 @@ impl Text {
         cursor.position = Point { x: 0, y: 0 }
     }
 
-    pub fn get_selection(&mut self) -> String {
-        let UndoPoint { cursor, text } = self.current_point();
+    pub fn get_selection_str(&mut self) -> Option<String> {
+        let e = self.selection_range()?;
+        let UndoPoint { text, .. } = self.current_point();
+        Some(text.slice(e).to_string())
+    }
 
-        let e = selection_range(text, cursor);
-        text.slice(e).to_string()
+    pub fn selection_range(&mut self) -> Option<std::ops::Range<usize>> {
+        let UndoPoint { cursor, text } = self.current_point();
+        let a = cursor.position.to_char(text);
+        let b = cursor.selection?.to_char(text);
+        Some(a.min(b)..b.max(a))
     }
 
     pub fn get_current_line(&mut self) -> String {
         let UndoPoint { cursor, text } = self.current_point();
         return text.line(cursor.position.y as usize).to_string();
+    }
+
+    pub fn remove_selection(&mut self) -> Option<String> {
+        let str = self.get_selection_str();
+        let range = self.selection_range()?;
+        self.add_undo_point();
+
+        let UndoPoint { text, .. } = self.current_point();
+        text.remove(range);
+
+        return str;
+    }
+
+    pub fn remove_current_line(&mut self) -> String {
+        let line_to_remove = self.get_current_line();
+        if line_to_remove.len() > 0 {
+            self.add_undo_point();
+        }
+
+        let UndoPoint { cursor, text } = self.current_point();
+        cursor.position.x = 0;
+        cursor.remembered_x = 0;
+        let start_idx = Point::to_char(&cursor.position, text);
+        let end_idx = start_idx + text.line(cursor.position.y as usize).len_chars();
+
+        text.remove(start_idx..end_idx);
+        return line_to_remove;
     }
 }

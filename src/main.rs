@@ -5,6 +5,7 @@ extern crate glfw;
 mod app;
 mod check_error;
 mod cursor;
+mod editor_action;
 mod font;
 mod matrix;
 mod offset_of;

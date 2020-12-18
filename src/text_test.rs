@@ -1,5 +1,5 @@
 use crate::cursor;
-use crate::text::{DeleteKey, Selection, Text};
+use crate::text::{DeleteDirection, Selection, Text};
 use cursor::Point;
 
 fn create_text(initial_text: &str) -> Text {
@@ -70,7 +70,7 @@ fn should_replace_selection() {
 fn delete_should_delete_next_char() {
     let mut text = create_text("initial text");
 
-    text.delete_text(DeleteKey::Del);
+    text.delete_text(DeleteDirection::Forward);
 
     assert_eq!(text.get_string(), "nitial text");
     assert_eq!(text.get_cursor().position.x, 0);
@@ -81,7 +81,7 @@ fn delete_should_delete_next_char() {
 fn delete_empty_string() {
     let mut text = create_text("");
 
-    text.delete_text(DeleteKey::Del);
+    text.delete_text(DeleteDirection::Forward);
 
     assert_eq!(text.get_string(), "");
     assert_eq!(text.get_cursor().position.x, 0);
@@ -92,7 +92,7 @@ fn delete_empty_string() {
 fn delete_cursor_on_last_position() {
     let mut text = create_text("text");
     text.get_cursor().position.x = 4;
-    text.delete_text(DeleteKey::Del);
+    text.delete_text(DeleteDirection::Forward);
 
     assert_eq!(text.get_string(), "text");
     assert_eq!(text.get_cursor().position.x, 4);
@@ -104,7 +104,7 @@ fn delete_text_backspace() {
 
     text.get_cursor().position.x = 2;
 
-    text.delete_text(DeleteKey::Backspace);
+    text.delete_text(DeleteDirection::Back);
 
     assert_eq!(text.get_string(), "iitial text");
     assert_eq!(text.get_cursor().position.x, 1);
@@ -115,7 +115,7 @@ fn delete_text_backspace() {
 fn delete_text_backspace_empty_string() {
     let mut text = create_text("");
 
-    text.delete_text(DeleteKey::Backspace);
+    text.delete_text(DeleteDirection::Back);
 
     assert_eq!(text.get_string(), "");
     assert_eq!(text.get_cursor().position.x, 0);
@@ -126,7 +126,7 @@ fn delete_text_backspace_empty_string() {
 fn delete_text_backspace_cursor_at_start() {
     let mut text = create_text("text");
 
-    text.delete_text(DeleteKey::Backspace);
+    text.delete_text(DeleteDirection::Back);
 
     assert_eq!(text.get_string(), "text");
     assert_eq!(text.get_cursor().position.x, 0);
@@ -138,7 +138,7 @@ fn delete_selection() {
     text.get_cursor().position.x = 3;
     text.get_cursor().selection = Some(Point { x: 1, y: 0 });
 
-    text.delete_text(DeleteKey::Backspace);
+    text.delete_text(DeleteDirection::Back);
     assert_eq!(text.get_string(), "tt");
     assert_eq!(text.get_cursor().position.x, 1);
 }
@@ -147,9 +147,9 @@ fn delete_selection() {
 fn undo_on_empty_delete() {
     let mut text = create_text("text");
 
-    text.delete_text(DeleteKey::Del);
-    text.delete_text(DeleteKey::Backspace);
-    text.delete_text(DeleteKey::Backspace);
+    text.delete_text(DeleteDirection::Forward);
+    text.delete_text(DeleteDirection::Back);
+    text.delete_text(DeleteDirection::Back);
     text.undo();
     assert_eq!(text.get_string(), "text");
     assert_eq!(text.get_cursor().position.x, 0);
@@ -248,7 +248,7 @@ fn undo_redo_delete_text() {
     let mut text = create_text("123");
 
     text.get_cursor().selection = Some(Point { x: 2, y: 0 });
-    text.delete_text(DeleteKey::Del);
+    text.delete_text(DeleteDirection::Forward);
     text.undo();
 
     assert_eq!(text.get_string(), "123");
@@ -263,7 +263,7 @@ fn remove_selection_after_delete() {
     let mut text = create_text("123");
 
     text.get_cursor().selection = Some(Point { x: 2, y: 0 });
-    text.delete_text(DeleteKey::Del);
+    text.delete_text(DeleteDirection::Forward);
 
     assert_eq!(text.get_cursor().selection.is_none(), true);
 }
@@ -272,13 +272,13 @@ fn remove_selection_after_delete() {
 fn retain_cursor_position_of_first_edit_2() {
     let mut text = create_text("123");
     text.get_cursor().position.x = 1;
-    text.delete_text(DeleteKey::Backspace);
+    text.delete_text(DeleteDirection::Back);
     text.undo();
     assert_eq!(text.get_cursor().position.x, 1);
 
     text.get_cursor().position.x = 2;
 
-    text.delete_text(DeleteKey::Backspace);
+    text.delete_text(DeleteDirection::Back);
     text.undo();
 
     assert_eq!(text.get_cursor().position.x, 2);
@@ -323,9 +323,9 @@ fn group_delete_undo() {
     let mut text = create_text("   ");
     text.move_cursor(3, Selection::NotSelect);
 
-    text.delete_text(DeleteKey::Backspace);
-    text.delete_text(DeleteKey::Backspace);
-    text.delete_text(DeleteKey::Backspace);
+    text.delete_text(DeleteDirection::Back);
+    text.delete_text(DeleteDirection::Back);
+    text.delete_text(DeleteDirection::Back);
 
     text.undo();
     assert_eq!(text.get_string(), "   ");
@@ -336,9 +336,9 @@ fn group_delete_undo_line_brake() {
     let mut text = create_text("\n\n\n");
     text.move_cursor(3, Selection::NotSelect);
 
-    text.delete_text(DeleteKey::Backspace);
-    text.delete_text(DeleteKey::Backspace);
-    text.delete_text(DeleteKey::Backspace);
+    text.delete_text(DeleteDirection::Back);
+    text.delete_text(DeleteDirection::Back);
+    text.delete_text(DeleteDirection::Back);
 
     text.undo();
     assert_eq!(text.get_string(), "\n");
@@ -680,9 +680,54 @@ fn replace_selection() {
     assert_eq!(text.get_cursor().selection.is_none(), true);
 }
 
-
 #[test]
 fn remove_crlf() {
     let text = create_text("\r\n\r\nline 1\r\nline 2\r\n");
-	assert_eq!(text.get_text(), "\n\nline 1\nline 2\n");
+    assert_eq!(text.get_text(), "\n\nline 1\nline 2\n");
+}
+
+#[test]
+fn remove_selection() {
+    let mut text = create_text("line 1\n");
+    text.move_cursor(4, Selection::Select);
+    let removed_text = text.remove_selection();
+    assert_eq!(removed_text, Some("line".to_owned()));
+    assert_eq!(text.get_text(), " 1\n");
+
+    text.undo();
+
+    assert_eq!(text.get_text(), "line 1\n");
+}
+
+#[test]
+fn remove_current_line() {
+    let mut text = create_text("line 1\nline 2\nline3");
+    text.move_cursor_y(1, Selection::NotSelect);
+    text.move_cursor(2, Selection::NotSelect);
+    let removed_text = text.remove_current_line();
+    assert_eq!(removed_text, "line 2\n");
+    assert_eq!(text.get_text(), "line 1\nline3");
+
+    assert_eq!(text.current_point().cursor.position.x, 0);
+    assert_eq!(text.current_point().cursor.position.y, 1);
+
+    text.undo();
+
+    assert_eq!(text.get_text(), "line 1\nline 2\nline3");
+}
+
+#[test]
+fn remove_current_line_empty() {
+    let mut text = create_text("1");
+    text.delete_text(DeleteDirection::Forward);
+    let removed_text = text.remove_current_line();
+    assert_eq!(removed_text, "");
+
+    text.undo();
+
+    assert_eq!(
+        text.get_text(),
+        "1",
+        "should not add undo point if file is empty"
+    );
 }

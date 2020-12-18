@@ -1,12 +1,12 @@
 extern crate gl;
 
 extern crate glfw;
-use glfw::Context;
+use glfw::{Action, Context};
 
-use crate::app;
 use crate::process_keyboard;
 use crate::render;
 use crate::scroll;
+use crate::{app, process_keyboard::KeyAction};
 use app::{projection_from_size, App};
 
 use std::{env, time::Instant};
@@ -35,26 +35,26 @@ impl<'t> Program {
     pub fn new() -> Program {
         let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
 
-        let (mut window, events) = glfw
-            .create_window(800, 600, "Hello this is window", glfw::WindowMode::Windowed)
-            .expect("Failed to create GLFW window.");
-
-        window.make_current();
-        window.set_key_polling(true);
-
         glfw.window_hint(glfw::WindowHint::ContextVersion(3, 3));
         glfw.window_hint(glfw::WindowHint::OpenGlProfile(
             glfw::OpenGlProfileHint::Core,
         ));
+
         glfw.window_hint(glfw::WindowHint::Samples(Some(4)));
 
-        glfw.set_swap_interval(glfw::SwapInterval::Sync(1));
+        let (mut window, events) = glfw
+            .create_window(800, 600, "Hello this is window", glfw::WindowMode::Windowed)
+            .expect("Failed to create GLFW window.");
 
         window.set_framebuffer_size_polling(true);
         window.set_refresh_polling(true);
         window.set_char_polling(true);
 
+        window.make_current();
+        window.set_key_polling(true);
+
         gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
+        glfw.set_swap_interval(glfw::SwapInterval::Sync(1));
 
         unsafe {
             gl::ClearColor(30.0 / 255.0, 30.0 / 255.0, 30.0 / 255.0, 1.0);
@@ -109,9 +109,16 @@ impl<'t> Program {
             glfw::WindowEvent::Refresh => {
                 app.should_rerender = true;
             }
-            glfw::WindowEvent::Key(key, scancode, action, modifiers) => {
-                process_keyboard::process_keyboard(app, key, scancode, action, modifiers);
-                clamp_scroll(app);
+            glfw::WindowEvent::Key(key, _scancode, action, modifiers) => {
+                if *action == Action::Press || *action == Action::Repeat {
+                    let key = KeyAction {
+                        key: *key,
+                        modifiers: *modifiers,
+                    };
+                    process_keyboard::process_keyboard(app, key);
+                    clamp_scroll(app);
+                    app.should_rerender = true;
+                }
             }
             glfw::WindowEvent::Char(char) => {
                 process_keyboard::process_char(app, char);

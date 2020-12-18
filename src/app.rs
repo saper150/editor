@@ -1,10 +1,10 @@
 extern crate gl;
 extern crate glfw;
 
-use crate::font;
 use crate::matrix;
 use crate::rect;
 use crate::text;
+use crate::{font, process_keyboard::KeyBoardShortcuts};
 
 use crate::scroll;
 use scroll::Scroll;
@@ -24,6 +24,7 @@ pub struct App {
     pub window: glfw::Window,
     pub glfw: glfw::Glfw,
     pub text: text::Text,
+    pub shortcuts: KeyBoardShortcuts,
 }
 
 pub fn projection_from_size(width: i32, height: i32) -> matrix::Matrix {
@@ -68,6 +69,7 @@ impl App {
             scroll: Scroll::new(),
             projection: projection_from_size(width, height),
             text: text,
+            shortcuts: KeyBoardShortcuts::new(),
         };
     }
 }
