@@ -105,7 +105,11 @@ fn render_selection(app: &mut App, projection: &Matrix, range: std::ops::Range<u
 
 fn mvp_matrix(app: &App) -> Matrix {
     let screen_scroll = app.scroll.current_scroll.y * app.font_renderer.advance_height;
-    matrix::mul(&app.projection, &matrix::translate(0.0, screen_scroll, 0.0))
+    let x_scroll = app.scroll.current_scroll.x * app.font_renderer.char_width;
+    matrix::mul(
+        &app.projection,
+        &matrix::translate(-x_scroll, screen_scroll, 0.0),
+    )
 }
 
 fn render_cursor(app: &mut App, mvp: &matrix::Matrix) {

@@ -3,25 +3,38 @@ extern crate gl;
 extern crate glfw;
 use glfw::{Action, Context};
 
-use crate::process_keyboard;
 use crate::render;
 use crate::scroll;
 use crate::{app, process_keyboard::KeyAction};
+use crate::{app::visible_range_x, process_keyboard};
 use app::{projection_from_size, App};
 
 use std::{env, time::Instant};
 
 fn clamp_scroll(app: &mut App) {
     let visible_range = app::visible_range(app, app.scroll.target_scroll.y);
-    if app.text.get_cursor().position.y > visible_range.end as i64 - 3 {
-        let target_scroll = app.text.get_cursor().position.y + 3
-            - ((visible_range.end - visible_range.start) as i64);
+    let cursor_position = app.text.get_cursor().position;
+    if cursor_position.y > visible_range.end as i64 - 3 {
+        let target_scroll =
+            cursor_position.y + 3 - ((visible_range.end - visible_range.start) as i64);
         scroll::scroll_to(&mut app.scroll, target_scroll as f32)
     }
 
-    if app.text.get_cursor().position.y < (visible_range.start + 1) as i64 {
-        let target_scroll = (app.text.get_cursor().position.y - 1).max(0);
+    if cursor_position.y < (visible_range.start + 1) as i64 {
+        let target_scroll = (cursor_position.y - 1).max(0);
         scroll::scroll_to(&mut app.scroll, target_scroll as f32);
+    }
+
+    let range_x = visible_range_x(app, app.scroll.current_scroll.x);
+
+    if cursor_position.x > range_x.end as i64 - 1 {
+        let target_scroll = cursor_position.x + 1 - ((range_x.end - range_x.start) as i64);
+        scroll::scroll_to_x(&mut app.scroll, target_scroll as f32);
+    }
+
+    if cursor_position.x < (range_x.start + 1) as i64 {
+        let target_scroll = (cursor_position.x - 1).max(0);
+        scroll::scroll_to_x(&mut app.scroll, target_scroll as f32);
     }
 }
 

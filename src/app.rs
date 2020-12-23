@@ -45,6 +45,13 @@ pub fn visible_range(app: &App, scroll_y: f32) -> std::ops::Range<usize> {
         ..scroll_y as usize + ((y_size as f32) / app.font_renderer.advance_height).ceil() as usize
 }
 
+pub fn visible_range_x(app: &App, scroll_x: f32) -> std::ops::Range<usize> {
+    let (x_size, _) = app.window.get_framebuffer_size();
+
+    scroll_x as usize
+        ..scroll_x as usize + ((x_size as f32) / app.font_renderer.char_width).ceil() as usize
+}
+
 impl App {
     pub fn new(
         window: glfw::Window,

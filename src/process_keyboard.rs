@@ -280,7 +280,6 @@ impl KeyBoardShortcuts {
 }
 
 pub fn process_keyboard(app: &mut App, key: KeyAction) {
-    println!("{:?}", key.key);
     if let Some(action) = app.shortcuts.get_action(&key) {
         dispatch_action(app, action);
         return;

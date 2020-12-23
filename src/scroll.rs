@@ -42,6 +42,10 @@ pub fn scroll_to(scroll: &mut Scroll, y: f32) {
     }
 }
 
+pub fn scroll_to_x(scroll: &mut Scroll, x: f32) {
+    scroll.current_scroll.x = x
+}
+
 pub fn advance_scroll(scroll: &mut Scroll, time: f32) -> bool {
     if scroll.base_scroll == scroll.target_scroll {
         return false;
