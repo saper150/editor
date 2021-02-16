@@ -2,10 +2,7 @@ use std::fs;
 
 use memchr::memchr_iter;
 
-use crate::{
-    app::App,
-    text::{remove_crlf_from_buff, DeleteDirection, Selection},
-};
+use crate::{app::App, scroll::scroll_to, text::{remove_crlf_from_buff, DeleteDirection, Selection}};
 
 #[derive(Clone, Copy)]
 pub enum EditorAction {
@@ -100,16 +97,24 @@ pub fn dispatch_action(app: &mut App, action: EditorAction) {
         EditorAction::CursorEnd => app.text.move_to_end_of_line(Selection::NotSelect),
         EditorAction::CursorEndSelect => app.text.move_to_end_of_line(Selection::Select),
         EditorAction::CursorPageDown => {
-            app.text.move_cursor_y(20, Selection::NotSelect);
+			app.text.move_cursor_y(20, Selection::NotSelect);
+			let scroll_target = app.scroll.target_scroll.y + 20.0;
+			scroll_to(&mut app.scroll, scroll_target);
         }
         EditorAction::CursorPageDownSelect => {
-            app.text.move_cursor_y(20, Selection::Select);
+			app.text.move_cursor_y(20, Selection::Select);
+			let scroll_target = app.scroll.target_scroll.y + 20.0;
+			scroll_to(&mut app.scroll, scroll_target);
         }
         EditorAction::CursorPageUp => {
-            app.text.move_cursor_y(-20, Selection::NotSelect);
+			app.text.move_cursor_y(-20, Selection::NotSelect);
+			let scroll_target = (app.scroll.target_scroll.y - 20.0).max(0.0);
+			scroll_to(&mut app.scroll, scroll_target);
         }
         EditorAction::CursorPageUpSelect => {
-            app.text.move_cursor_y(-20, Selection::Select);
+			app.text.move_cursor_y(-20, Selection::Select);
+			let scroll_target = (app.scroll.target_scroll.y - 20.0).max(0.0);
+			scroll_to(&mut app.scroll, scroll_target);
         }
         EditorAction::CursorEndOfFile => {
             app.text.move_to_end(Selection::NotSelect);

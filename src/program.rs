@@ -67,7 +67,9 @@ impl<'t> Program {
         window.set_key_polling(true);
 
         gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
-        glfw.set_swap_interval(glfw::SwapInterval::Sync(1));
+        // glfw.set_swap_interval(glfw::SwapInterval::Sync(1));
+        glfw.set_swap_interval(glfw::SwapInterval::None);
+
 
         unsafe {
             gl::ClearColor(30.0 / 255.0, 30.0 / 255.0, 30.0 / 255.0, 1.0);

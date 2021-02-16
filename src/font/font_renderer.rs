@@ -1,6 +1,8 @@
 extern crate freetype as ft;
 extern crate gl;
 
+use ropey::RopeSlice;
+
 use crate::shaders;
 use std::ffi::CString;
 
@@ -18,8 +20,11 @@ pub struct FontRenderer {
     font_atlas: FontAtlas,
     program: shaders::Program,
     vao: gl::types::GLuint,
+
     quad_buffer_object: gl::types::GLuint,
+    buffer_position: isize,
     quad_buffer_size: usize,
+
     transform_loc: gl::types::GLint,
     index_buffer: gl::types::GLuint,
 }
@@ -158,6 +163,8 @@ impl FontRenderer {
             vao: vao,
             quad_buffer_object: vbo,
             quad_buffer_size: 0,
+            buffer_position: 0,
+
             font_atlas: atlas,
             transform_loc: transform_loc,
             index_buffer,
@@ -175,81 +182,66 @@ impl FontRenderer {
         }
     }
 
-    fn fill_buffer(&mut self, text: &ropey::Rope, range: std::ops::Range<usize>) -> usize {
+    fn add_line(
+        &mut self,
+        buff: *mut GlyphInstance,
+        line_number: usize,
+        line: impl Iterator<Item = char>,
+    ) {
+        let mut advance: f32 = 0.0;
+        let line_offset = line_number as f32 * self.font_atlas.advance_height as f32;
+        for char in line {
+            if char == '\n' {
+                continue;
+            }
+            if char == '\t' {
+                let g = self.font_atlas.get_glyph(' ');
+                advance += g.advance_width * 4.0;
+            } else {
+                let g = self.font_atlas.get_glyph(char);
+                unsafe {
+                    *buff.offset(self.buffer_position) = g.instance(
+                        advance,
+                        line_offset,
+                        [213.0 / 255.0, 213.0 / 255.0, 213.0 / 255.0],
+                    );
+                }
+                self.buffer_position += 1;
+                advance += g.advance_width;
+            }
+        }
+    }
+
+    fn ensure_buffer_size(&mut self, size: usize) {
         unsafe {
             gl::BindBuffer(gl::ARRAY_BUFFER, self.quad_buffer_object);
         }
-
-        let lines = text
-            .lines_at(range.start.min(text.len_lines()))
-            .take(range.end - range.start);
-
-        let car_count = lines.clone().map(|x| x.len_chars()).sum();
-        if self.quad_buffer_size < car_count {
+        if self.quad_buffer_size < size {
             unsafe {
                 gl::BufferData(
                     gl::ARRAY_BUFFER,
-                    (car_count * 2 * std::mem::size_of::<GlyphInstance>()) as gl::types::GLsizeiptr,
+                    (size * 2 * std::mem::size_of::<GlyphInstance>()) as gl::types::GLsizeiptr,
                     std::ptr::null(),
                     gl::DYNAMIC_DRAW,
                 );
             }
-            self.quad_buffer_size = car_count * 2;
+            self.quad_buffer_size = size * 2;
         }
-
-        let xpos = 0.0;
-        let ypos = 0.0;
-
-        let mut line_offset: f32 = range.start as f32 * self.font_atlas.advance_height;
-
-        let mut i: usize = 0;
-        let b;
-        unsafe {
-            b = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY) as *mut GlyphInstance;
-        }
-
-        for line in lines {
-            line_offset += self.font_atlas.advance_height;
-            let mut advance: f32 = 0.0;
-            for char in line.chars() {
-                if char == '\n' {
-                    continue;
-                }
-                if char == '\t' {
-                    let g = self.font_atlas.get_glyph(' ');
-                    advance += g.advance_width * 4.0;
-                } else {
-                    let g = self.font_atlas.get_glyph(char);
-                    unsafe {
-                        *b.offset(i as isize) = g.instance(
-                            xpos + advance,
-                            ypos + line_offset,
-                            [213.0 / 255.0, 213.0 / 255.0, 213.0 / 255.0],
-                        );
-                    }
-                    i += 1;
-                    advance += g.advance_width;
-                }
-            }
-        }
-
-        unsafe {
-            gl::UnmapBuffer(gl::ARRAY_BUFFER);
-        }
-        i
     }
 
-    pub fn render(
+    fn fill_buffer<'a>(
         &mut self,
-        text: &ropey::Rope,
-        range: std::ops::Range<usize>,
-        projection: &matrix::Matrix,
+        buffer: *mut GlyphInstance,
+        lines: impl Iterator<Item = RopeSlice<'a>>,
     ) {
-        self.program.set_used();
-        self.set_projection(projection);
+        let mut current_line: usize = 0;
+        for line in lines {
+            current_line += 1;
+            self.add_line(buffer, current_line, line.chars());
+        }
+    }
 
-        let size = self.fill_buffer(text, range);
-
+    fn draw_buffer(&mut self) {
         unsafe {
             gl::BindVertexArray(self.vao);
             gl::BlendFunc(gl::SRC1_COLOR, gl::ONE_MINUS_SRC1_COLOR);
@@ -261,10 +253,53 @@ impl FontRenderer {
                 6,
                 gl::UNSIGNED_INT,
                 std::ptr::null(),
-                size as i32,
+                self.buffer_position as i32,
             );
         }
+        self.buffer_position = 0;
+    }
+
+    pub fn render_text_with_line_numbers(
+        &mut self,
+        text: &ropey::Rope,
+        range: std::ops::Range<usize>,
+        projection: &matrix::Matrix,
+    ) {
+        let lines = text
+            .lines_at(range.start.min(text.len_lines()))
+            .take(range.end - range.start);
+
+        let car_count: usize = lines.clone().map(|x| x.len_chars()).sum();
+        self.ensure_buffer_size(car_count + range.len() * 15);
+
+        let buffer =
+            unsafe { gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY) as *mut GlyphInstance };
+
+        self.fill_buffer(buffer, lines);
+        self.fill_line_numbers(buffer, range);
+
+        unsafe {
+            gl::UnmapBuffer(gl::ARRAY_BUFFER);
+        }
+
+        self.program.set_used();
+        self.set_projection(projection);
+        self.draw_buffer();
 
         check_error!();
     }
+
+    fn fill_line_numbers(&mut self, buffer: *mut GlyphInstance, range: std::ops::Range<usize>) {
+        use std::fmt::Write;
+        let mut char_buff = String::with_capacity(16);
+
+        let mut current_line: usize = 0;
+        for i in range.clone().into_iter() {
+            current_line += 1;
+            write!(&mut char_buff, "{}", i + 1).unwrap();
+            self.add_line(buffer, current_line, char_buff.chars());
+            char_buff.clear();
+        }
+    }
+
 }

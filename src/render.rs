@@ -15,10 +15,10 @@ fn x_to_screen(app: &App, x: i64) -> f32 {
 
 fn y_to_screen(app: &App, y: i64) -> f32 {
     let height = app.font_renderer.advance_height;
-    ((y + 2) as f32 * height) - app.font_renderer.ascender
+    ((y as f32 - app.scroll.current_scroll.y + 2.0) as f32 * height) - app.font_renderer.ascender
 }
 
-fn grid_to_screen(app: &App, pos: Point) -> (f32, f32) {
+fn grid_to_screen(app: &mut App, pos: Point) -> (f32, f32) {
     (x_to_screen(app, pos.x), y_to_screen(app, pos.y))
 }
 
@@ -51,11 +51,12 @@ fn render_selection(app: &mut App, projection: &Matrix, range: std::ops::Range<u
     let mut v = Vec::new();
 
     let start_screen = grid_to_screen(app, start);
+    let screen_end = grid_to_screen(app, end);
     if start.y == end.y {
         v.push(create_rect(
             start_screen.0,
             start_screen.1,
-            x_to_screen(app, end.x - start.x),
+            screen_end.0 - start_screen.0,
             height,
             [0.5, 0.5, 0.5],
         ));
@@ -103,20 +104,12 @@ fn render_selection(app: &mut App, projection: &Matrix, range: std::ops::Range<u
     app.rect_renderer.render(&v, &projection);
 }
 
-fn mvp_matrix(app: &App) -> Matrix {
-    let screen_scroll = app.scroll.current_scroll.y * app.font_renderer.advance_height;
-    let x_scroll = app.scroll.current_scroll.x * app.font_renderer.char_width;
-    matrix::mul(
-        &app.projection,
-        &matrix::translate(-x_scroll, screen_scroll, 0.0),
-    )
-}
-
 fn render_cursor(app: &mut App, mvp: &matrix::Matrix) {
     let width = 2.0;
     let height = app.font_renderer.advance_height;
 
     let cursor_position = app.text.get_cursor().position;
+
     let screen_pos = grid_to_screen(app, cursor_position);
 
     app.rect_renderer.render(
@@ -132,19 +125,22 @@ fn render_cursor(app: &mut App, mvp: &matrix::Matrix) {
 }
 
 pub fn render_app(app: &mut App) {
+
     if app.should_rerender {
+		use crate::timer;
+		timer!("render_time");
+
         unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT);
         }
 
         let visible_range = app::visible_range(app, app.scroll.current_scroll.y);
 
-        let mvp = mvp_matrix(app);
+        let mvp = app.projection.clone();
         render_selection(app, &mvp, visible_range.clone());
         render_cursor(app, &mvp);
 
-        app.font_renderer
-            .render(&app.text.get_text(), visible_range, &mvp);
+		app.font_renderer.render_text_with_line_numbers(&app.text.get_text(), visible_range.clone(), &mvp);
 
         app.window.swap_buffers();
         app.should_rerender = false;
