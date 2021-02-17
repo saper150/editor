@@ -2,9 +2,10 @@ extern crate freetype as ft;
 extern crate gl;
 
 use ropey::RopeSlice;
+use crate::timer;
 
 use crate::shaders;
-use std::ffi::CString;
+use std::{ffi::CString, mem::MaybeUninit};
 
 use crate::check_error;
 use crate::offset_of;
@@ -275,8 +276,16 @@ impl FontRenderer {
         let buffer =
             unsafe { gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY) as *mut GlyphInstance };
 
-        self.fill_buffer(buffer, lines);
-        self.fill_line_numbers(buffer, range);
+		{
+			
+			timer!("text_buffer");
+			self.fill_buffer(buffer, lines);
+		}
+
+		{
+			timer!("line_numbers_buffer");
+			self.fill_line_numbers(buffer, range);
+		}
 
         unsafe {
             gl::UnmapBuffer(gl::ARRAY_BUFFER);
@@ -284,22 +293,56 @@ impl FontRenderer {
 
         self.program.set_used();
         self.set_projection(projection);
-        self.draw_buffer();
+
+		{
+			timer!("draw");
+			self.draw_buffer();
+		}
+
 
         check_error!();
     }
 
     fn fill_line_numbers(&mut self, buffer: *mut GlyphInstance, range: std::ops::Range<usize>) {
-        use std::fmt::Write;
-        let mut char_buff = String::with_capacity(16);
 
-        let mut current_line: usize = 0;
-        for i in range.clone().into_iter() {
-            current_line += 1;
-            write!(&mut char_buff, "{}", i + 1).unwrap();
-            self.add_line(buffer, current_line, char_buff.chars());
-            char_buff.clear();
+		let mut stack_buffer: [u8; 20] = unsafe { MaybeUninit::uninit().assume_init() };
+
+        for (index, range_value) in range.clone().into_iter().enumerate() {
+            let n = itoa::write(&mut stack_buffer[..], range_value + 1).unwrap();
+
+            self.add_line(
+                buffer,
+                index + 1,
+                CharBytesIterator::new(&stack_buffer[..n]),
+            );
         }
     }
+}
 
+struct CharBytesIterator<'a> {
+    src: &'a [u8],
+    current: usize,
+}
+
+impl<'a> CharBytesIterator<'a> {
+    pub fn new(buff: &'a [u8]) -> CharBytesIterator<'a> {
+        CharBytesIterator {
+            src: buff,
+            current: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for CharBytesIterator<'a> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<char> {
+        if self.current < self.src.len() {
+            let s = Some(self.src[self.current] as char);
+            self.current += 1;
+            return s;
+        } else {
+            return None;
+        }
+    }
 }

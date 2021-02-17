@@ -2,6 +2,7 @@ use crate::app;
 use crate::cursor::Point;
 use crate::matrix;
 use crate::rect::rect_renderer::create_rect;
+use crate::timer;
 
 use crate::glfw::Context;
 
@@ -31,22 +32,21 @@ fn render_selection(app: &mut App, projection: &Matrix, range: std::ops::Range<u
 
     let selection = app.text.get_cursor().selection.unwrap();
 
-    let (mut start, mut end) = if selection.y == app.text.get_cursor().position.y {
-        if selection.x >= app.text.get_cursor().position.x {
-            (app.text.get_cursor().position, selection)
+    let mut pos = [app.text.get_cursor().position, selection];
+
+    pos.sort_by(|a, b| {
+        if a.y == b.y {
+            return a.x.cmp(&b.x);
         } else {
-            (selection, app.text.get_cursor().position)
+            return a.y.cmp(&b.y);
         }
-    } else {
-        if selection.y > app.text.get_cursor().position.y {
-            (app.text.get_cursor().position, selection)
-        } else {
-            (selection, app.text.get_cursor().position)
-        }
-    };
+    });
+
+    let mut start = pos[0];
+    let mut end = pos[1];
 
     start.y = start.y.max(range.start as i64);
-    end.y = end.y.min(range.end as i64);
+    end.y = end.y.max(start.y).min(range.end as i64);
 
     let mut v = Vec::new();
 
@@ -125,10 +125,8 @@ fn render_cursor(app: &mut App, mvp: &matrix::Matrix) {
 }
 
 pub fn render_app(app: &mut App) {
-
     if app.should_rerender {
-		use crate::timer;
-		timer!("render_time");
+        timer!("render_time");
 
         unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT);
@@ -137,10 +135,17 @@ pub fn render_app(app: &mut App) {
         let visible_range = app::visible_range(app, app.scroll.current_scroll.y);
 
         let mvp = app.projection.clone();
-        render_selection(app, &mvp, visible_range.clone());
+        {
+            timer!("render_selection");
+            render_selection(app, &mvp, visible_range.clone());
+        }
         render_cursor(app, &mvp);
 
-		app.font_renderer.render_text_with_line_numbers(&app.text.get_text(), visible_range.clone(), &mvp);
+        app.font_renderer.render_text_with_line_numbers(
+            &app.text.get_text(),
+            visible_range.clone(),
+            &mvp,
+        );
 
         app.window.swap_buffers();
         app.should_rerender = false;

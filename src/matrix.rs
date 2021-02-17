@@ -23,6 +23,7 @@ pub fn orto(params: OrtoParams) -> Matrix {
     ]
 }
 
+#[allow(dead_code)]
 pub fn translate(x: f32, y: f32, z: f32) -> Matrix {
     [
         [1.0, 0.0, 0.0, 0.0],
@@ -31,7 +32,7 @@ pub fn translate(x: f32, y: f32, z: f32) -> Matrix {
         [x, -y, z, 1.0],
     ]
 }
-
+#[allow(dead_code)]
 pub fn mul(a: &Matrix, b: &Matrix) -> Matrix {
     let mut m: Matrix = [[0.0; 4]; 4];
 
